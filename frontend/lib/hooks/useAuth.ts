@@ -112,11 +112,17 @@ export function useAuth() {
     if (data.user) {
       // Fetch profile and update login time (non-blocking)
       void fetchProfile(data.user.id).catch(() => {})
-      void (supabase
-        .from('profiles') as any)
-        .update({ last_login_at: new Date().toISOString() })
-        .eq('id', data.user.id)
-        .catch(() => {})
+      // Update last login time (non-blocking, fire and forget)
+      ;(async () => {
+        try {
+          await (supabase
+            .from('profiles') as any)
+            .update({ last_login_at: new Date().toISOString() })
+            .eq('id', data.user.id)
+        } catch {
+          // Silently fail - not critical
+        }
+      })()
     }
 
     return { data, error: null }
