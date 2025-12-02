@@ -218,14 +218,14 @@ export default function CompaniesPage() {
                   <Linkedin className="h-5 w-5 text-[#004565]" />
                   <h3 className="text-lg font-semibold text-[#004565]">LinkedIn</h3>
                 </div>
-                {(selectedCompany as any).linkedin_url ? (
+                {selectedCompany.linkedin_url ? (
                   <a
-                    href={(selectedCompany as any).linkedin_url.startsWith('http') ? (selectedCompany as any).linkedin_url : `https://${(selectedCompany as any).linkedin_url}`}
+                    href={selectedCompany.linkedin_url.startsWith('http') ? selectedCompany.linkedin_url : `https://${selectedCompany.linkedin_url}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm text-[#376EE1] hover:text-[#004565] hover:underline"
                   >
-                    {(selectedCompany as any).linkedin_url}
+                    {selectedCompany.linkedin_url}
                   </a>
                 ) : (
                   <p className="text-sm text-[#004565]/60 italic">N/A</p>
@@ -238,14 +238,14 @@ export default function CompaniesPage() {
                   <Facebook className="h-5 w-5 text-[#004565]" />
                   <h3 className="text-lg font-semibold text-[#004565]">Facebook</h3>
                 </div>
-                {(selectedCompany as any).facebook_url ? (
+                {selectedCompany.facebook_url ? (
                   <a
-                    href={(selectedCompany as any).facebook_url.startsWith('http') ? (selectedCompany as any).facebook_url : `https://${(selectedCompany as any).facebook_url}`}
+                    href={selectedCompany.facebook_url.startsWith('http') ? selectedCompany.facebook_url : `https://${selectedCompany.facebook_url}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm text-[#376EE1] hover:text-[#004565] hover:underline"
                   >
-                    {(selectedCompany as any).facebook_url}
+                    {selectedCompany.facebook_url}
                   </a>
                 ) : (
                   <p className="text-sm text-[#004565]/60 italic">N/A</p>
@@ -258,14 +258,14 @@ export default function CompaniesPage() {
                   <Twitter className="h-5 w-5 text-[#004565]" />
                   <h3 className="text-lg font-semibold text-[#004565]">Twitter</h3>
                 </div>
-                {(selectedCompany as any).twitter_url ? (
+                {selectedCompany.twitter_url ? (
                   <a
-                    href={(selectedCompany as any).twitter_url.startsWith('http') ? (selectedCompany as any).twitter_url : `https://${(selectedCompany as any).twitter_url}`}
+                    href={selectedCompany.twitter_url.startsWith('http') ? selectedCompany.twitter_url : `https://${selectedCompany.twitter_url}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm text-[#376EE1] hover:text-[#004565] hover:underline"
                   >
-                    {(selectedCompany as any).twitter_url}
+                    {selectedCompany.twitter_url}
                   </a>
                 ) : (
                   <p className="text-sm text-[#004565]/60 italic">N/A</p>
@@ -279,7 +279,7 @@ export default function CompaniesPage() {
                   <h3 className="text-lg font-semibold text-[#004565]">Address</h3>
                 </div>
                 <p className="text-sm text-[#000000] whitespace-pre-wrap">
-                  {(selectedCompany as any).address || 'N/A'}
+                  {selectedCompany.address || 'N/A'}
                 </p>
               </div>
 
@@ -290,7 +290,7 @@ export default function CompaniesPage() {
                   <h3 className="text-lg font-semibold text-[#004565]">Short Description</h3>
                 </div>
                 <p className="text-sm text-[#000000] whitespace-pre-wrap">
-                  {(selectedCompany as any).short_description || 'N/A'}
+                  {selectedCompany.short_description || 'N/A'}
                 </p>
               </div>
             </div>

@@ -56,8 +56,9 @@ export function checkSupabaseConfig() {
   return { configured: true }
 }
 
-// Development logging
+// Development logging (only in development mode)
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  // eslint-disable-next-line no-console
   console.log('🔍 Supabase Configuration:', {
     url: isConfigured ? `${supabaseUrl.substring(0, 30)}...` : 'MISSING',
     key: isConfigured ? 'SET' : 'MISSING',
@@ -65,8 +66,11 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   })
   
   if (!isConfigured) {
+    // eslint-disable-next-line no-console
     console.error('❌ Supabase is not configured!')
+    // eslint-disable-next-line no-console
     console.error('   URL:', supabaseUrl || 'EMPTY')
+    // eslint-disable-next-line no-console
     console.error('   Key:', supabaseAnonKey ? 'EXISTS' : 'EMPTY')
   }
 }

@@ -60,8 +60,8 @@ export function useAuth() {
     try {
       const { data: { user: authUser } } = await supabase.auth.getUser()
       
-      const { data, error } = await supabase
-        .from('profiles')
+      const { data, error } = await (supabase
+        .from('profiles') as any)
         .select('*')
         .eq('id', userId)
         .single()
@@ -69,8 +69,8 @@ export function useAuth() {
       if (error) {
         // If profile doesn't exist, try to create it
         if (error.code === 'PGRST116' && authUser) {
-          const { data: newProfile } = await supabase
-            .from('profiles')
+          const { data: newProfile } = await (supabase
+            .from('profiles') as any)
             .insert({
               id: userId,
               email: authUser.email || '',
@@ -111,9 +111,9 @@ export function useAuth() {
 
     if (data.user) {
       // Fetch profile and update login time (non-blocking)
-      fetchProfile(data.user.id).catch(() => {})
-      supabase
-        .from('profiles')
+      void fetchProfile(data.user.id).catch(() => {})
+      void (supabase
+        .from('profiles') as any)
         .update({ last_login_at: new Date().toISOString() })
         .eq('id', data.user.id)
         .catch(() => {})
@@ -148,8 +148,8 @@ export function useAuth() {
       return { data: null, error: new Error('User not authenticated') }
     }
 
-    const { data, error } = await supabase
-      .from('profiles')
+    const { data, error } = await (supabase
+      .from('profiles') as any)
       .update(updates)
       .eq('id', user.id)
       .select()

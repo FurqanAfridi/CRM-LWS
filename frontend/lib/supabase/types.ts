@@ -36,6 +36,11 @@ export interface Database {
           icp_qualified: boolean
           qualification_reason: string | null
           website: string | null
+          linkedin_url: string | null
+          facebook_url: string | null
+          twitter_url: string | null
+          address: string | null
+          short_description: string | null
           created_at: string
           updated_at: string
         }
@@ -52,6 +57,11 @@ export interface Database {
           icp_qualified?: boolean
           qualification_reason?: string | null
           website?: string | null
+          linkedin_url?: string | null
+          facebook_url?: string | null
+          twitter_url?: string | null
+          address?: string | null
+          short_description?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -68,6 +78,11 @@ export interface Database {
           icp_qualified?: boolean
           qualification_reason?: string | null
           website?: string | null
+          linkedin_url?: string | null
+          facebook_url?: string | null
+          twitter_url?: string | null
+          address?: string | null
+          short_description?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -132,6 +147,11 @@ export interface Database {
           probability: number
           notes: string | null
           email_verification: boolean | string | null
+          name: string | null
+          email: string | null
+          company_name: string | null
+          title: string | null
+          lead_tier: string | null
           created_at: string
           updated_at: string
         }
@@ -153,6 +173,11 @@ export interface Database {
           probability?: number
           notes?: string | null
           email_verification?: boolean | string | null
+          name?: string | null
+          email?: string | null
+          company_name?: string | null
+          title?: string | null
+          lead_tier?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -174,6 +199,11 @@ export interface Database {
           probability?: number
           notes?: string | null
           email_verification?: boolean | string | null
+          name?: string | null
+          email?: string | null
+          company_name?: string | null
+          title?: string | null
+          lead_tier?: string | null
           created_at?: string
           updated_at?: string
         }

@@ -28,16 +28,19 @@ export default function LoginPage() {
         const response = await fetch('/api/test-env')
         const serverCheck = await response.json()
         
-        console.log('🔍 Environment Check:', serverCheck)
+        // eslint-disable-next-line no-console
+        if (process.env.NODE_ENV === 'development') console.log('🔍 Environment Check:', serverCheck)
         
         if (serverCheck.configured) {
           setIsConfigured(true)
         } else {
-          console.error('⚠️ Server does not have environment variables configured')
+          // eslint-disable-next-line no-console
+          if (process.env.NODE_ENV === 'development') console.error('⚠️ Server does not have environment variables configured')
           setIsConfigured(false)
         }
       } catch (error) {
-        console.error('Failed to check server env vars:', error)
+        // eslint-disable-next-line no-console
+        if (process.env.NODE_ENV === 'development') console.error('Failed to check server env vars:', error)
         setIsConfigured(false)
       } finally {
         setChecking(false)

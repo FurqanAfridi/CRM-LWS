@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import Link from 'next/link'
-import { Target, Download, Mail, Building2, ArrowRight, DollarSign, TrendingUp, AlertCircle, MessageSquare, FileText, RefreshCw, CheckCircle2, XCircle, ShieldCheck } from 'lucide-react'
+import { Target, Download, Mail, Building2, ArrowRight, DollarSign, TrendingUp, AlertCircle, MessageSquare, FileText, RefreshCw, CheckCircle2, XCircle, ShieldCheck, Plus } from 'lucide-react'
 import { Database } from '@/lib/supabase/types'
 
 type Lead = Database['public']['Tables']['leads']['Row']
@@ -160,7 +160,8 @@ export default function LeadsPage() {
       // Network or other errors
       const errorMessage = error?.message || 'Failed to connect to the webhook. Please try again later.'
       setFetchError(errorMessage)
-      console.error('Error fetching leads:', error)
+      // eslint-disable-next-line no-console
+      if (process.env.NODE_ENV === 'development') console.error('Error fetching leads:', error)
     } finally {
       setIsFetching(false)
     }
@@ -172,7 +173,8 @@ export default function LeadsPage() {
       // Directly refetch leads data from database
       await refetch()
     } catch (error) {
-      console.error('Error refreshing leads:', error)
+      // eslint-disable-next-line no-console
+      if (process.env.NODE_ENV === 'development') console.error('Error refreshing leads:', error)
     } finally {
       setIsRefreshing(false)
     }
@@ -225,7 +227,8 @@ export default function LeadsPage() {
       // Network or other errors
       const errorMessage = error?.message || 'Failed to connect to the webhook. Please try again later.'
       setVerifyError(errorMessage)
-      console.error('Error verifying leads:', error)
+      // eslint-disable-next-line no-console
+      if (process.env.NODE_ENV === 'development') console.error('Error verifying leads:', error)
     } finally {
       setIsVerifying(false)
     }
