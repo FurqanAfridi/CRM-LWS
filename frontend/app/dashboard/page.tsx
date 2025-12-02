@@ -1,110 +1,87 @@
 'use client'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Target, Building2, TrendingUp, DollarSign, AlertCircle } from 'lucide-react'
+import { Target, Building2, TrendingUp, DollarSign } from 'lucide-react'
 import { useDashboardMetrics } from '@/lib/hooks/useAnalytics'
-import { checkSupabaseConfig } from '@/lib/supabase/client'
 
 export default function DashboardPage() {
   const { data: metrics, isLoading, error } = useDashboardMetrics()
-  const configCheck = checkSupabaseConfig()
-
-  // Handle error state gracefully
-  if (error) {
-    console.error('Dashboard metrics error:', error)
-  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-1">Welcome to your CRM dashboard</p>
+      <div className="relative">
+        <h1 className="text-4xl font-bold text-[#004565]">
+          Dashboard
+        </h1>
+        <p className="text-[#004565]/80 mt-2 font-medium">Welcome to your CRM dashboard</p>
+        <div className="absolute -top-2 -left-2 w-32 h-32 bg-[#376EE1]/20 rounded-full blur-2xl -z-10"></div>
       </div>
 
-      {/* Configuration Warning */}
-      {!configCheck.configured && (
-        <Card className="border-yellow-200 bg-yellow-50">
-          <CardHeader>
-            <CardTitle className="text-yellow-900 flex items-center gap-2">
-              <AlertCircle className="h-5 w-5" />
-              Supabase Not Configured
-            </CardTitle>
-            <CardDescription className="text-yellow-700">
-              Please configure your Supabase connection to enable full functionality
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <p className="text-sm text-yellow-800">
-                {configCheck.error?.message || 'Missing Supabase environment variables'}
-              </p>
-              <ul className="text-xs text-yellow-700 list-disc list-inside space-y-1">
-                <li>Create a <code className="bg-yellow-100 px-1 rounded">.env.local</code> file in the frontend directory</li>
-                <li>Add <code className="bg-yellow-100 px-1 rounded">NEXT_PUBLIC_SUPABASE_URL</code> and <code className="bg-yellow-100 px-1 rounded">NEXT_PUBLIC_SUPABASE_ANON_KEY</code></li>
-                <li>Restart your development server after adding the variables</li>
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-[#004565]/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 bg-white/90 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-[#000000]">Total Leads</CardTitle>
+            <div className="h-10 w-10 rounded-lg bg-[#376EE1]/10 flex items-center justify-center">
+              <Target className="h-5 w-5 text-[#376EE1]" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-3xl font-bold text-[#004565]">
               {isLoading ? '...' : error ? 'Error' : metrics?.totalLeads || 0}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-[#004565]/70 mt-1">
               {error ? 'Failed to load' : 'Total leads'}
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-[#004565]/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 bg-white/90 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Qualified Leads</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-[#000000]">Qualified Leads</CardTitle>
+            <div className="h-10 w-10 rounded-lg bg-[#00CD50]/10 flex items-center justify-center">
+              <Target className="h-5 w-5 text-[#00CD50]" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-3xl font-bold text-[#004565]">
               {isLoading ? '...' : error ? 'Error' : metrics?.qualifiedLeads || 0}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-[#004565]/70 mt-1">
               {error ? 'Failed to load' : 'ICP qualified'}
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-[#004565]/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 bg-white/90 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Companies</CardTitle>
-            <Building2 className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-[#000000]">Companies</CardTitle>
+            <div className="h-10 w-10 rounded-lg bg-[#376EE1]/10 flex items-center justify-center">
+              <Building2 className="h-5 w-5 text-[#376EE1]" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-3xl font-bold text-[#004565]">
               {isLoading ? '...' : error ? 'Error' : metrics?.totalCompanies || 0}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-[#004565]/70 mt-1">
               {error ? 'Failed to load' : 'Active companies'}
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-[#004565]/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 bg-white/90 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pipeline Value</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-[#000000]">Pipeline Value</CardTitle>
+            <div className="h-10 w-10 rounded-lg bg-[#00FF00]/10 flex items-center justify-center">
+              <DollarSign className="h-5 w-5 text-[#00CD50]" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-3xl font-bold text-[#004565]">
               {isLoading ? '...' : error ? 'Error' : `$${Number(metrics?.pipelineValue || 0).toLocaleString()}`}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-[#004565]/70 mt-1">
               {error ? 'Failed to load' : 'Total estimated value'}
             </p>
           </CardContent>
@@ -112,19 +89,19 @@ export default function DashboardPage() {
       </div>
 
       {/* Recent Activity */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-          <CardDescription>Latest interactions and updates</CardDescription>
+      <Card className="border-[#004565]/20 shadow-lg bg-white/90 backdrop-blur-sm">
+        <CardHeader className="border-b border-[#004565]/10">
+          <CardTitle className="text-[#004565]">Recent Activity</CardTitle>
+          <CardDescription className="text-[#004565]/70">Latest interactions and updates</CardDescription>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">No recent activity</p>
+        <CardContent className="pt-6">
+          <p className="text-sm text-[#004565]/70">No recent activity</p>
         </CardContent>
       </Card>
 
       {/* Error Message */}
       {error && (
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-red-200/50 bg-red-50/90 backdrop-blur-sm shadow-lg">
           <CardHeader>
             <CardTitle className="text-red-900">Connection Error</CardTitle>
             <CardDescription className="text-red-700">

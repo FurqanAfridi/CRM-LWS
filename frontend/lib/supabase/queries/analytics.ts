@@ -1,4 +1,4 @@
-import { supabase, checkSupabaseConfig } from '../client'
+import { supabase } from '../client'
 
 export interface DashboardMetrics {
   totalLeads: number
@@ -21,40 +21,13 @@ export interface ConversionFunnel {
 }
 
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {
-  try {
-    const configCheck = checkSupabaseConfig()
-    if (!configCheck.configured) {
-      console.warn('Supabase not configured:', configCheck.error?.message)
-      return {
-        totalLeads: 0,
-        qualifiedLeads: 0,
-        totalCompanies: 0,
-        pipelineValue: 0,
-        conversionRate: 0,
-      }
-    }
+  const [leadsResult, companiesResult] = await Promise.all([
+    supabase.from('leads').select('id, qualification_status, estimated_value, status'),
+    supabase.from('companies').select('id'),
+  ])
 
-    const [leadsResult, companiesResult] = await Promise.all([
-      supabase.from('leads').select('id, qualification_status, estimated_value, status'),
-      supabase.from('companies').select('id'),
-    ])
-
-    if (leadsResult.error) {
-      console.error('Leads query error:', leadsResult.error)
-      // Return default values instead of throwing
-      return {
-        totalLeads: 0,
-        qualifiedLeads: 0,
-        totalCompanies: 0,
-        pipelineValue: 0,
-        conversionRate: 0,
-      }
-    }
-    
-    if (companiesResult.error) {
-      console.error('Companies query error:', companiesResult.error)
-      // Continue with leads data if companies query fails
-    }
+  if (leadsResult.error) throw leadsResult.error
+  if (companiesResult.error) throw companiesResult.error
 
   const leads = (leadsResult.data || []) as Array<{
     id: string
@@ -71,44 +44,24 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     return sum + (Number(lead.estimated_value) || 0)
   }, 0)
 
-    const closedWon = leads.filter((l) => l.status === 'closed_won').length
-    const conversionRate = totalLeads > 0 ? (closedWon / totalLeads) * 100 : 0
+  const closedWon = leads.filter((l) => l.status === 'closed_won').length
+  const conversionRate = totalLeads > 0 ? (closedWon / totalLeads) * 100 : 0
 
-    return {
-      totalLeads,
-      qualifiedLeads,
-      totalCompanies,
-      pipelineValue,
-      conversionRate,
-    }
-  } catch (error) {
-    console.error('Error fetching dashboard metrics:', error)
-    // Return default values on error
-    return {
-      totalLeads: 0,
-      qualifiedLeads: 0,
-      totalCompanies: 0,
-      pipelineValue: 0,
-      conversionRate: 0,
-    }
+  return {
+    totalLeads,
+    qualifiedLeads,
+    totalCompanies,
+    pipelineValue,
+    conversionRate,
   }
 }
 
 export async function getObjectionFrequency(): Promise<ObjectionFrequency[]> {
-  const configCheck = checkSupabaseConfig()
-  if (!configCheck.configured) {
-    console.warn('Supabase not configured')
-    return []
-  }
-
   const { data, error } = await supabase
     .from('leads')
     .select('objections')
 
-  if (error) {
-    console.error('Error fetching objection frequency:', error)
-    return []
-  }
+  if (error) throw error
 
   const objectionCounts = new Map<string, number>()
   let totalObjections = 0
@@ -133,20 +86,11 @@ export async function getObjectionFrequency(): Promise<ObjectionFrequency[]> {
 }
 
 export async function getConversionFunnel(): Promise<ConversionFunnel[]> {
-  const configCheck = checkSupabaseConfig()
-  if (!configCheck.configured) {
-    console.warn('Supabase not configured')
-    return []
-  }
-
   const { data, error } = await supabase
     .from('leads')
     .select('status')
 
-  if (error) {
-    console.error('Error fetching conversion funnel:', error)
-    return []
-  }
+  if (error) throw error
 
   const statusCounts = new Map<string, number>()
   const leads = (data || []) as Array<{ status: string }>
@@ -174,30 +118,11 @@ export async function getICPPerformance(): Promise<{
   qualificationRate: number
   averageScore: number
 }> {
-  const configCheck = checkSupabaseConfig()
-  if (!configCheck.configured) {
-    console.warn('Supabase not configured')
-    return {
-      totalCompanies: 0,
-      qualifiedCompanies: 0,
-      qualificationRate: 0,
-      averageScore: 0,
-    }
-  }
-
   const { data, error } = await supabase
     .from('companies')
     .select('icp_qualified, icp_score')
 
-  if (error) {
-    console.error('Error fetching ICP performance:', error)
-    return {
-      totalCompanies: 0,
-      qualifiedCompanies: 0,
-      qualificationRate: 0,
-      averageScore: 0,
-    }
-  }
+  if (error) throw error
 
   const companies = (data || []) as Array<{ icp_qualified: boolean; icp_score: number | null }>
   const totalCompanies = companies.length

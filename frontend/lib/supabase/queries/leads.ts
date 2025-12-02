@@ -1,4 +1,4 @@
-import { supabase, checkSupabaseConfig } from '../client'
+import { supabase } from '../client'
 import { Database } from '../types'
 
 type Lead = Database['public']['Tables']['leads']['Row']
@@ -14,75 +14,43 @@ export interface LeadFilters {
 }
 
 export async function getLeads(filters?: LeadFilters) {
-  try {
-    const configCheck = checkSupabaseConfig()
-    if (!configCheck.configured) {
-      console.warn('Supabase not configured')
-      return []
-    }
+  let query = supabase
+    .from('leads')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(1000) // Add reasonable limit to prevent fetching too many records
 
-    let query = supabase
-      .from('leads')
-      .select(`
-        *,
-        companies (*),
-        contacts (*)
-      `)
-      .order('created_at', { ascending: false })
-
-    if (filters?.status) {
-      query = query.eq('status', filters.status)
-    }
-    if (filters?.qualification_status) {
-      query = query.eq('qualification_status', filters.qualification_status)
-    }
-    if (filters?.company_id) {
-      query = query.eq('company_id', filters.company_id)
-    }
-    if (filters?.contact_id) {
-      query = query.eq('contact_id', filters.contact_id)
-    }
-    if (filters?.icp_score_min) {
-      query = query.gte('icp_score', filters.icp_score_min)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-      console.error('Error fetching leads:', error)
-      return [] // Return empty array instead of throwing
-    }
-    return (data || []) as Lead[]
-  } catch (error) {
-    console.error('Error in getLeads:', error)
-    return [] // Return empty array on error
+  if (filters?.status) {
+    query = query.eq('status', filters.status)
   }
+  if (filters?.qualification_status) {
+    query = query.eq('qualification_status', filters.qualification_status)
+  }
+  if (filters?.company_id) {
+    query = query.eq('company_id', filters.company_id)
+  }
+  if (filters?.contact_id) {
+    query = query.eq('contact_id', filters.contact_id)
+  }
+  if (filters?.icp_score_min) {
+    query = query.gte('icp_score', filters.icp_score_min)
+  }
+
+  const { data, error } = await query
+
+  if (error) throw error
+  return (data || []) as Lead[]
 }
 
 export async function getLeadById(id: string) {
   const { data, error } = await supabase
     .from('leads')
-    .select(`
-      *,
-      companies (*),
-      contacts (*),
-      interactions (*),
-      contracts (*),
-      qualification_responses (*),
-      tasks (*)
-    `)
+    .select('*')
     .eq('id', id)
     .single()
 
   if (error) throw error
-  return data as Lead & {
-    companies: Database['public']['Tables']['companies']['Row'] | null
-    contacts: Database['public']['Tables']['contacts']['Row'] | null
-    interactions: Database['public']['Tables']['interactions']['Row'][]
-    contracts: Database['public']['Tables']['contracts']['Row'][]
-    qualification_responses: Database['public']['Tables']['qualification_responses']['Row'][]
-    tasks: Database['public']['Tables']['tasks']['Row'][]
-  }
+  return data as Lead
 }
 
 export async function createLead(lead: LeadInsert) {

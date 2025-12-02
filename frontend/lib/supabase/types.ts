@@ -131,6 +131,7 @@ export interface Database {
           estimated_value: number | null
           probability: number
           notes: string | null
+          email_verification: boolean | string | null
           created_at: string
           updated_at: string
         }
@@ -151,6 +152,7 @@ export interface Database {
           estimated_value?: number | null
           probability?: number
           notes?: string | null
+          email_verification?: boolean | string | null
           created_at?: string
           updated_at?: string
         }
@@ -171,6 +173,7 @@ export interface Database {
           estimated_value?: number | null
           probability?: number
           notes?: string | null
+          email_verification?: boolean | string | null
           created_at?: string
           updated_at?: string
         }

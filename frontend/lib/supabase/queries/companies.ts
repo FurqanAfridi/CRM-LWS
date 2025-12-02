@@ -1,4 +1,4 @@
-import { supabase, checkSupabaseConfig } from '../client'
+import { supabase } from '../client'
 import { Database } from '../types'
 import { calculateICPScore } from '@/lib/utils/icp-scoring'
 
@@ -14,39 +14,29 @@ export interface CompanyFilters {
 }
 
 export async function getCompanies(filters?: CompanyFilters) {
-  try {
-    const configCheck = checkSupabaseConfig()
-    if (!configCheck.configured) {
-      console.warn('Supabase not configured')
-      return []
-    }
+  let query = supabase
+    .from('companies')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(1000) // Add reasonable limit to prevent fetching too many records
 
-    let query = supabase.from('companies').select('*').order('created_at', { ascending: false })
-
-    if (filters?.industry_type) {
-      query = query.eq('industry_type', filters.industry_type)
-    }
-    if (filters?.icp_qualified !== undefined) {
-      query = query.eq('icp_qualified', filters.icp_qualified)
-    }
-    if (filters?.location_count_min) {
-      query = query.gte('location_count', filters.location_count_min)
-    }
-    if (filters?.location_count_max) {
-      query = query.lte('location_count', filters.location_count_max)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-      console.error('Error fetching companies:', error)
-      return [] // Return empty array instead of throwing
-    }
-    return (data || []) as Company[]
-  } catch (error) {
-    console.error('Error in getCompanies:', error)
-    return [] // Return empty array on error
+  if (filters?.industry_type) {
+    query = query.eq('industry_type', filters.industry_type)
   }
+  if (filters?.icp_qualified !== undefined) {
+    query = query.eq('icp_qualified', filters.icp_qualified)
+  }
+  if (filters?.location_count_min) {
+    query = query.gte('location_count', filters.location_count_min)
+  }
+  if (filters?.location_count_max) {
+    query = query.lte('location_count', filters.location_count_max)
+  }
+
+  const { data, error } = await query
+
+  if (error) throw error
+  return (data || []) as Company[]
 }
 
 export async function getCompanyById(id: string) {

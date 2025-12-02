@@ -13,11 +13,9 @@ export interface ContactFilters {
 export async function getContacts(filters?: ContactFilters) {
   let query = supabase
     .from('contacts')
-    .select(`
-      *,
-      companies (*)
-    `)
+    .select('id, first_name, last_name, email, phone, job_title, department, company_id, is_decision_maker, created_at, updated_at')
     .order('created_at', { ascending: false })
+    .limit(1000)
 
   if (filters?.company_id) {
     query = query.eq('company_id', filters.company_id)
@@ -27,7 +25,6 @@ export async function getContacts(filters?: ContactFilters) {
   }
 
   const { data, error } = await query
-
   if (error) throw error
   return data as Contact[]
 }
@@ -35,19 +32,12 @@ export async function getContacts(filters?: ContactFilters) {
 export async function getContactById(id: string) {
   const { data, error } = await supabase
     .from('contacts')
-    .select(`
-      *,
-      companies (*),
-      interactions (*)
-    `)
+    .select('*')
     .eq('id', id)
     .single()
-
+  
   if (error) throw error
-  return data as Contact & {
-    companies: Database['public']['Tables']['companies']['Row'] | null
-    interactions: Database['public']['Tables']['interactions']['Row'][]
-  }
+  return data as Contact
 }
 
 export async function createContact(contact: ContactInsert) {

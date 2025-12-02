@@ -10,9 +10,10 @@ export function useDashboardMetrics() {
   return useQuery({
     queryKey: ['analytics', 'dashboard'],
     queryFn: () => getDashboardMetrics(),
-    retry: 1,
-    retryOnMount: false,
+    retry: 0,
+    retryOnMount: false, // Prevent double fetch on mount
     refetchOnWindowFocus: false,
+    staleTime: 30000, // Cache for 30 seconds instead of always fetching fresh
   })
 }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { User, Session } from '@supabase/supabase-js'
-import { supabase, checkSupabaseConfig } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 
 export interface Profile {
   id: string
@@ -26,20 +26,8 @@ export function useAuth() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Check if Supabase is configured
-    const configCheck = checkSupabaseConfig()
-    if (!configCheck.configured) {
-      setLoading(false)
-      return
-    }
-
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error) {
-        console.error('Error getting session:', error)
-        setLoading(false)
-        return
-      }
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setUser(session?.user ?? null)
       if (session?.user) {
@@ -47,8 +35,7 @@ export function useAuth() {
       } else {
         setLoading(false)
       }
-    }).catch((error) => {
-      console.error('Error in getSession:', error)
+    }).catch(() => {
       setLoading(false)
     })
 
@@ -71,9 +58,6 @@ export function useAuth() {
 
   async function fetchProfile(userId: string) {
     try {
-      console.log('🔍 Fetching profile for user:', userId)
-      
-      // Get user email from auth
       const { data: { user: authUser } } = await supabase.auth.getUser()
       
       const { data, error } = await supabase
@@ -83,10 +67,9 @@ export function useAuth() {
         .single()
 
       if (error) {
-        // If profile doesn't exist (PGRST116), try to create it
+        // If profile doesn't exist, try to create it
         if (error.code === 'PGRST116' && authUser) {
-          console.log('⚠️ Profile not found, creating new profile...')
-          const { data: newProfile, error: createError } = await supabase
+          const { data: newProfile } = await supabase
             .from('profiles')
             .insert({
               id: userId,
@@ -98,29 +81,18 @@ export function useAuth() {
             .select()
             .single()
 
-          if (createError) {
-            console.error('❌ Error creating profile:', createError)
-            setProfile(null)
-          } else {
-            console.log('✅ Profile created successfully:', newProfile)
+          if (newProfile) {
             setProfile(newProfile as Profile)
+          } else {
+            setProfile(null)
           }
         } else {
-          console.error('❌ Error fetching profile:', error)
-          console.error('Error details:', {
-            message: error.message,
-            details: error.details,
-            hint: error.hint,
-            code: error.code,
-          })
           setProfile(null)
         }
       } else {
-        console.log('✅ Profile fetched successfully:', data)
         setProfile(data as Profile)
       }
-    } catch (error) {
-      console.error('❌ Exception fetching profile:', error)
+    } catch {
       setProfile(null)
     } finally {
       setLoading(false)
@@ -128,49 +100,30 @@ export function useAuth() {
   }
 
   const signIn = async (email: string, password: string) => {
-    try {
-      const configCheck = checkSupabaseConfig()
-      if (!configCheck.configured) {
-        throw configCheck.error || new Error('Supabase is not configured')
-      }
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-      if (error) {
-        throw error
-      }
-
-      if (data.user) {
-        try {
-          await fetchProfile(data.user.id)
-          // Update last_login_at (don't fail if this errors)
-          try {
-            await supabase
-              .from('profiles')
-              .update({ last_login_at: new Date().toISOString() })
-              .eq('id', data.user.id)
-          } catch (profileError) {
-            console.warn('Failed to update last_login_at:', profileError)
-          }
-        } catch (profileError) {
-          console.warn('Failed to fetch profile after login:', profileError)
-        }
-      }
-
-      return { data, error: null }
-    } catch (error: unknown) {
-      const err = error as Error
-      console.error('Sign in error:', err)
-      throw err
+    if (error) {
+      return { data: null, error }
     }
+
+    if (data.user) {
+      // Fetch profile and update login time (non-blocking)
+      fetchProfile(data.user.id).catch(() => {})
+      supabase
+        .from('profiles')
+        .update({ last_login_at: new Date().toISOString() })
+        .eq('id', data.user.id)
+        .catch(() => {})
+    }
+
+    return { data, error: null }
   }
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
+    await supabase.auth.signOut()
     setUser(null)
     setSession(null)
     setProfile(null)
@@ -187,13 +140,12 @@ export function useAuth() {
       },
     })
 
-    if (error) throw error
     return { data, error }
   }
 
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!user) {
-      throw new Error('User not authenticated')
+      return { data: null, error: new Error('User not authenticated') }
     }
 
     const { data, error } = await supabase
@@ -203,7 +155,7 @@ export function useAuth() {
       .select()
       .single()
 
-    if (error) throw error
+    if (error) return { data: null, error }
     if (data) {
       setProfile(data as Profile)
     }
@@ -212,15 +164,14 @@ export function useAuth() {
 
   const updatePassword = async (newPassword: string) => {
     if (!user) {
-      throw new Error('User not authenticated')
+      return { error: new Error('User not authenticated') }
     }
 
     const { error } = await supabase.auth.updateUser({
       password: newPassword,
     })
 
-    if (error) throw error
-    return { error: null }
+    return { error }
   }
 
   const refreshProfile = async () => {
