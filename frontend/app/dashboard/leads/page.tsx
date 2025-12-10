@@ -8,8 +8,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import Link from 'next/link'
-import { Target, Download, Mail, Building2, ArrowRight, DollarSign, TrendingUp, AlertCircle, MessageSquare, FileText, RefreshCw, CheckCircle2, XCircle, ShieldCheck, Plus } from 'lucide-react'
+import { Target, Download, Mail, Building2, ArrowRight, DollarSign, TrendingUp, AlertCircle, MessageSquare, FileText, RefreshCw, CheckCircle2, XCircle, ShieldCheck, Plus, Play } from 'lucide-react'
 import { Database } from '@/lib/supabase/types'
+import { StartSequenceDialog } from '@/components/outreach/StartSequenceDialog'
 
 type Lead = Database['public']['Tables']['leads']['Row']
 
@@ -18,6 +19,9 @@ export default function LeadsPage() {
   const queryClient = useQueryClient()
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isStartSequenceDialogOpen, setIsStartSequenceDialogOpen] = useState(false)
+  const [selectedLeadIdsForSequence, setSelectedLeadIdsForSequence] = useState<string[]>([])
+  const [selectedLeadNamesForSequence, setSelectedLeadNamesForSequence] = useState<string[]>([])
   const [isFetching, setIsFetching] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isVerifying, setIsVerifying] = useState(false)
@@ -95,6 +99,20 @@ export default function LeadsPage() {
   const handleViewLead = (lead: Lead) => {
     setSelectedLead(lead)
     setIsDialogOpen(true)
+  }
+
+  const handleStartSequence = (lead: Lead) => {
+    setSelectedLeadIdsForSequence([lead.id])
+    setSelectedLeadNamesForSequence([lead.name || lead.email || 'Lead'])
+    setIsStartSequenceDialogOpen(true)
+  }
+
+  const handleSequenceStarted = () => {
+    queryClient.invalidateQueries({ queryKey: ['leads'] })
+    queryClient.invalidateQueries({ queryKey: ['email-campaigns'] })
+    setIsStartSequenceDialogOpen(false)
+    setSelectedLeadIdsForSequence([])
+    setSelectedLeadNamesForSequence([])
   }
 
   const parseJsonField = (field: unknown): string[] => {
@@ -504,6 +522,21 @@ export default function LeadsPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-[#00CD50] hover:text-[#00CD50]/80 hover:bg-[#00CD50]/10"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleStartSequence(lead)
+                            }}
+                            disabled={!lead.email}
+                            title={!lead.email ? 'Email required to start sequence' : 'Start email sequence'}
+                          >
+                            <Play className="h-4 w-4 mr-1" />
+                            Start
+                          </Button>
                         <Button 
                           variant="ghost" 
                           size="sm" 
@@ -513,6 +546,7 @@ export default function LeadsPage() {
                           View
                           <ArrowRight className="h-4 w-4 ml-1" />
                         </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -613,10 +647,39 @@ export default function LeadsPage() {
                   <p className="text-sm text-[#004565]/60 italic">No notes recorded</p>
                 )}
               </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#004565]/10">
+                <Button
+                  onClick={() => handleStartSequence(selectedLead)}
+                  disabled={!selectedLead.email}
+                  className="bg-[#00CD50] hover:bg-[#00CD50]/90 text-white"
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  Start Email Sequence
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Start Sequence Dialog */}
+      {selectedLeadIdsForSequence.length > 0 && (
+        <StartSequenceDialog
+          leadIds={selectedLeadIdsForSequence}
+          leadNames={selectedLeadNamesForSequence}
+          open={isStartSequenceDialogOpen}
+          onOpenChange={(open) => {
+            setIsStartSequenceDialogOpen(open)
+            if (!open) {
+              setSelectedLeadIdsForSequence([])
+              setSelectedLeadNamesForSequence([])
+            }
+          }}
+          onSuccess={handleSequenceStarted}
+        />
+      )}
     </div>
   )
 }

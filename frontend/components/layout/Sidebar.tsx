@@ -12,11 +12,13 @@ import {
   BarChart3,
   MessageSquare,
   TrendingUp,
+  Mail,
 } from 'lucide-react'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Leads', href: '/dashboard/leads', icon: Target },
+  { name: 'Outreach', href: '/dashboard/outreach', icon: Mail },
   { name: 'Companies', href: '/dashboard/companies', icon: Building2 },
   { name: 'Contacts', href: '/dashboard/contacts', icon: Users },
   { name: 'Pipeline', href: '/dashboard/pipeline', icon: TrendingUp },

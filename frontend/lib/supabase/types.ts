@@ -18,6 +18,11 @@ export type InteractionType = 'call' | 'email' | 'meeting' | 'ai_call'
 export type InteractionDirection = 'inbound' | 'outbound'
 export type ContractType = 'single_vendor' | 'multi_vendor'
 export type UserRole = 'admin' | 'sdr' | 'manager'
+export type CampaignStatus = 'pending' | 'active' | 'paused' | 'completed' | 'cancelled'
+export type EmailMessageStatus = 'queued' | 'sent' | 'delivered' | 'opened' | 'replied' | 'bounced' | 'failed'
+export type OutreachStatus = 'not_started' | 'queued' | 'in_sequence' | 'responded' | 'booked' | 'completed'
+export type BookingStatus = 'link_sent' | 'confirmed' | 'cancelled' | 'no_show' | 'completed'
+export type DnsStatus = 'pass' | 'fail' | 'neutral' | 'none'
 
 export interface Database {
   public: {
@@ -152,6 +157,8 @@ export interface Database {
           company_name: string | null
           title: string | null
           lead_tier: string | null
+          outreach_status: OutreachStatus
+          current_campaign_id: string | null
           created_at: string
           updated_at: string
         }
@@ -178,6 +185,8 @@ export interface Database {
           company_name?: string | null
           title?: string | null
           lead_tier?: string | null
+          outreach_status?: OutreachStatus
+          current_campaign_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -204,6 +213,8 @@ export interface Database {
           company_name?: string | null
           title?: string | null
           lead_tier?: string | null
+          outreach_status?: OutreachStatus
+          current_campaign_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -222,6 +233,9 @@ export interface Database {
           objections_raised: Json
           qualification_data: Json
           sentiment: string | null
+          email_message_id: string | null
+          sequence_step: number | null
+          campaign_id: string | null
           created_at: string
         }
         Insert: {
@@ -237,6 +251,9 @@ export interface Database {
           objections_raised?: Json
           qualification_data?: Json
           sentiment?: string | null
+          email_message_id?: string | null
+          sequence_step?: number | null
+          campaign_id?: string | null
           created_at?: string
         }
         Update: {
@@ -252,6 +269,9 @@ export interface Database {
           objections_raised?: Json
           qualification_data?: Json
           sentiment?: string | null
+          email_message_id?: string | null
+          sequence_step?: number | null
+          campaign_id?: string | null
           created_at?: string
         }
       }
@@ -382,6 +402,208 @@ export interface Database {
           email?: string
           name?: string | null
           role?: UserRole
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      email_sequences: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          steps: Json
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          steps?: Json
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          steps?: Json
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      email_campaigns: {
+        Row: {
+          id: string
+          lead_id: string | null
+          sequence_id: string | null
+          status: CampaignStatus
+          current_step: number
+          started_at: string | null
+          completed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          lead_id?: string | null
+          sequence_id?: string | null
+          status?: CampaignStatus
+          current_step?: number
+          started_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          lead_id?: string | null
+          sequence_id?: string | null
+          status?: CampaignStatus
+          current_step?: number
+          started_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      email_messages: {
+        Row: {
+          id: string
+          campaign_id: string | null
+          lead_id: string | null
+          sequence_step: number
+          subject: string | null
+          content: string | null
+          status: EmailMessageStatus
+          sent_at: string | null
+          delivered_at: string | null
+          opened_at: string | null
+          replied_at: string | null
+          bounce_reason: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          campaign_id?: string | null
+          lead_id?: string | null
+          sequence_step: number
+          subject?: string | null
+          content?: string | null
+          status?: EmailMessageStatus
+          sent_at?: string | null
+          delivered_at?: string | null
+          opened_at?: string | null
+          replied_at?: string | null
+          bounce_reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          campaign_id?: string | null
+          lead_id?: string | null
+          sequence_step?: number
+          subject?: string | null
+          content?: string | null
+          status?: EmailMessageStatus
+          sent_at?: string | null
+          delivered_at?: string | null
+          opened_at?: string | null
+          replied_at?: string | null
+          bounce_reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      domain_warmup: {
+        Row: {
+          id: string
+          domain: string
+          day_number: number
+          daily_volume_sent: number
+          daily_volume_limit: number
+          reputation_score: number
+          spf_status: DnsStatus | null
+          dkim_status: DnsStatus | null
+          dmarc_status: DnsStatus | null
+          bounce_rate: number
+          spam_complaint_rate: number
+          blacklist_status: Json
+          last_updated: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          domain: string
+          day_number?: number
+          daily_volume_sent?: number
+          daily_volume_limit?: number
+          reputation_score?: number
+          spf_status?: DnsStatus | null
+          dkim_status?: DnsStatus | null
+          dmarc_status?: DnsStatus | null
+          bounce_rate?: number
+          spam_complaint_rate?: number
+          blacklist_status?: Json
+          last_updated?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          domain?: string
+          day_number?: number
+          daily_volume_sent?: number
+          daily_volume_limit?: number
+          reputation_score?: number
+          spf_status?: DnsStatus | null
+          dkim_status?: DnsStatus | null
+          dmarc_status?: DnsStatus | null
+          bounce_rate?: number
+          spam_complaint_rate?: number
+          blacklist_status?: Json
+          last_updated?: string
+          created_at?: string
+        }
+      }
+      calendar_bookings: {
+        Row: {
+          id: string
+          lead_id: string | null
+          campaign_id: string | null
+          calendar_link: string | null
+          booking_status: BookingStatus
+          scheduled_time: string | null
+          calendar_provider: string | null
+          meeting_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          lead_id?: string | null
+          campaign_id?: string | null
+          calendar_link?: string | null
+          booking_status?: BookingStatus
+          scheduled_time?: string | null
+          calendar_provider?: string | null
+          meeting_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          lead_id?: string | null
+          campaign_id?: string | null
+          calendar_link?: string | null
+          booking_status?: BookingStatus
+          scheduled_time?: string | null
+          calendar_provider?: string | null
+          meeting_id?: string | null
           created_at?: string
           updated_at?: string
         }
