@@ -13,12 +13,14 @@ import {
   MessageSquare,
   TrendingUp,
   Mail,
+  Reply,
 } from 'lucide-react'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Leads', href: '/dashboard/leads', icon: Target },
   { name: 'Outreach', href: '/dashboard/outreach', icon: Mail },
+  { name: 'Follow-ups', href: '/dashboard/follow-ups', icon: Reply },
   { name: 'Companies', href: '/dashboard/companies', icon: Building2 },
   { name: 'Contacts', href: '/dashboard/contacts', icon: Users },
   { name: 'Pipeline', href: '/dashboard/pipeline', icon: TrendingUp },

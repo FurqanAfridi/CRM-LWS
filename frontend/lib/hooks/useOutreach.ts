@@ -20,6 +20,8 @@ import {
   getEmailSequenceById,
   createEmailSequence,
   updateEmailSequence,
+  getRespondedLeads,
+  getLeadConversation,
   type CampaignFilters,
   type MetricsFilters,
   type BookingFilters,
@@ -135,6 +137,23 @@ export function useLeadMessages(leadId: string) {
   return useQuery({
     queryKey: ['lead-messages', leadId],
     queryFn: () => getLeadMessages(leadId),
+    enabled: !!leadId,
+  })
+}
+
+export function useRespondedLeads() {
+  return useQuery({
+    queryKey: ['responded-leads'],
+    queryFn: () => getRespondedLeads(),
+    staleTime: 30000, // 30 seconds
+    refetchInterval: 60000, // Refetch every minute to catch new responses
+  })
+}
+
+export function useLeadConversation(leadId: string) {
+  return useQuery({
+    queryKey: ['lead-conversation', leadId],
+    queryFn: () => getLeadConversation(leadId),
     enabled: !!leadId,
   })
 }

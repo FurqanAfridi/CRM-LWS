@@ -2,7 +2,8 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { useCampaign, useCampaignMessages } from '@/lib/hooks/useOutreach'
+import { useCampaign, useCampaignMessages, useEmailSequence } from '@/lib/hooks/useOutreach'
+import { useLead } from '@/lib/hooks/useLeads'
 import { Mail, Calendar, TrendingUp, Clock } from 'lucide-react'
 import { SequenceTimeline } from './SequenceTimeline'
 
@@ -15,13 +16,12 @@ interface CampaignDetailsDialogProps {
 export function CampaignDetailsDialog({ campaignId, open, onOpenChange }: CampaignDetailsDialogProps) {
   const { data: campaign } = useCampaign(campaignId || '')
   const { data: messages } = useCampaignMessages(campaignId || '')
+  const { data: lead } = useLead(campaign?.lead_id || '')
+  const { data: sequence } = useEmailSequence(campaign?.sequence_id || '')
 
   if (!campaignId || !campaign) {
     return null
   }
-
-  const lead = campaign.leads as any
-  const sequence = campaign.email_sequences as any
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

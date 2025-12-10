@@ -4,8 +4,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useEmailCampaigns } from '@/lib/hooks/useOutreach'
+import { useLeads } from '@/lib/hooks/useLeads'
 import { Mail, Building2, ArrowRight, Clock } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { CampaignDetailsDialog } from './CampaignDetailsDialog'
 
 const columns = [
@@ -20,8 +21,20 @@ const columns = [
 
 export function SequenceKanban() {
   const { data: campaigns, isLoading } = useEmailCampaigns()
+  const { data: leads } = useLeads()
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+
+  // Create a map of lead_id -> lead for quick lookup
+  const leadsMap = useMemo(() => {
+    const map = new Map()
+    leads?.forEach(lead => {
+      if (lead.id) {
+        map.set(lead.id, lead)
+      }
+    })
+    return map
+  }, [leads])
 
   if (isLoading) {
     return (
@@ -75,7 +88,7 @@ export function SequenceKanban() {
                 </div>
                 <div className="space-y-2 min-h-[400px]">
                   {columnCampaigns.map((campaign) => {
-                    const lead = campaign.leads as any
+                    const lead = campaign.lead_id ? leadsMap.get(campaign.lead_id) : null
                     return (
                       <Card
                         key={campaign.id}

@@ -225,6 +225,145 @@ export async function updateEmailMessage(id: string, updates: EmailMessageUpdate
   return data as EmailMessage
 }
 
+// Get all leads that have replied to emails
+export async function getRespondedLeads() {
+  // First get all unique lead_ids from email_messages with status 'replied'
+  const { data: repliedMessages, error: repliedError } = await supabase
+    .from('email_messages')
+    .select('lead_id, campaign_id, replied_at')
+    .eq('status', 'replied')
+    .not('replied_at', 'is', null)
+    .order('replied_at', { ascending: false })
+
+  if (repliedError) throw repliedError
+
+  // Get unique lead IDs
+  const leadIds = (repliedMessages || [])
+    .map((m: { lead_id: string | null }) => m.lead_id)
+    .filter((id): id is string => Boolean(id))
+  const uniqueLeadIds = Array.from(new Set(leadIds))
+
+  if (uniqueLeadIds.length === 0) return []
+
+  // Get all campaigns for these leads
+  const { data: campaignsData, error: campaignsError } = await supabase
+    .from('email_campaigns')
+    .select(`
+      *,
+      email_sequences (
+        id,
+        name
+      )
+    `)
+    .in('lead_id', uniqueLeadIds)
+
+  if (campaignsError) throw campaignsError
+
+  // Type the campaigns with the sequence relation
+  // Supabase returns relations as objects (not arrays) when selecting nested data
+  type CampaignWithSequence = EmailCampaign & {
+    email_sequences: { id: string; name: string } | null | { id: string; name: string }[]
+  }
+  const campaigns = (campaignsData || []) as CampaignWithSequence[]
+
+  // Get leads
+  const { data: leadsData, error: leadsError } = await supabase
+    .from('leads')
+    .select('id, name, email, company_name, outreach_status')
+    .in('id', uniqueLeadIds)
+
+  if (leadsError) throw leadsError
+
+  // Type the leads
+  type LeadBasic = {
+    id: string
+    name: string | null
+    email: string | null
+    company_name: string | null
+    outreach_status: string | null
+  }
+  const leads = (leadsData || []) as LeadBasic[]
+
+  // For each lead, combine the data
+  const leadsWithStats = await Promise.all(
+    leads.map(async (lead) => {
+      // Find active campaign for this lead
+      const campaign: CampaignWithSequence | null = campaigns.find((c) => 
+        c.lead_id === lead.id && 
+        (c.status === 'active' || c.status === 'paused' || c.status === 'pending')
+      ) || campaigns.find((c) => c.lead_id === lead.id) || null
+
+      // Get all messages for this lead
+      const { data: messagesData, error: messagesError } = await supabase
+        .from('email_messages')
+        .select('*')
+        .eq('lead_id', lead.id)
+        .order('sent_at', { ascending: false })
+
+      if (messagesError) throw messagesError
+
+      const messages = (messagesData || []) as EmailMessage[]
+      const totalEmailsSent = messages.length || 0
+      const replyCount = messages.filter((m: EmailMessage) => m.status === 'replied').length || 0
+      const repliedMessagesList = messages.filter((m: EmailMessage) => m.status === 'replied') || []
+      const lastRepliedAt = repliedMessagesList.length > 0 
+        ? repliedMessagesList[0]?.replied_at || null
+        : null
+      const lastEmailSentAt = messages?.[0]?.sent_at || null
+
+      return {
+        lead_id: lead.id,
+        lead_name: lead.name || lead.email || 'Unknown',
+        lead_email: lead.email || '',
+        company_name: lead.company_name,
+        campaign_id: campaign?.id || null,
+        sequence_id: campaign?.sequence_id || null,
+        sequence_name: campaign?.email_sequences && !Array.isArray(campaign.email_sequences)
+          ? (campaign.email_sequences as { name: string }).name
+          : Array.isArray(campaign?.email_sequences) && campaign.email_sequences.length > 0
+          ? campaign.email_sequences[0].name
+          : null,
+        campaign_status: campaign?.status || 'unknown',
+        current_step: campaign?.current_step || 0,
+        total_emails_sent: totalEmailsSent,
+        reply_count: replyCount,
+        last_replied_at: lastRepliedAt,
+        last_email_sent_at: lastEmailSentAt,
+        started_at: campaign?.started_at || null,
+        replied_messages: repliedMessagesList.map((m: any) => ({
+          id: m.id,
+          subject: m.subject,
+          content: m.content,
+          sequence_step: m.sequence_step,
+          sent_at: m.sent_at,
+          replied_at: m.replied_at,
+        })),
+      }
+    })
+  )
+
+  // Sort by last_replied_at (most recent first)
+  return leadsWithStats.sort((a, b) => {
+    if (!a.last_replied_at && !b.last_replied_at) return 0
+    if (!a.last_replied_at) return 1
+    if (!b.last_replied_at) return -1
+    return new Date(b.last_replied_at).getTime() - new Date(a.last_replied_at).getTime()
+  })
+}
+
+// Get full conversation thread for a lead
+export async function getLeadConversation(leadId: string) {
+  const { data, error } = await supabase
+    .from('email_messages')
+    .select('*')
+    .eq('lead_id', leadId)
+    .order('sequence_step', { ascending: true })
+    .order('sent_at', { ascending: true })
+
+  if (error) throw error
+  return (data || []) as EmailMessage[]
+}
+
 // ============================================================================
 // OUTREACH METRICS QUERIES
 // ============================================================================

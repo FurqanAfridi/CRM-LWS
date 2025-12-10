@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -24,7 +24,9 @@ export function StartSequenceDialog({ leadIds, leadNames, open, onOpenChange, on
   const [isStarting, setIsStarting] = useState(false)
 
   // Filter to only show active sequences
-  const sequences = allSequences?.filter((seq) => seq.is_active === true) || []
+  const sequences = useMemo(() => {
+    return allSequences?.filter((seq) => seq.is_active === true) || []
+  }, [allSequences])
 
   // Reset selection when dialog closes
   useEffect(() => {
@@ -32,20 +34,6 @@ export function StartSequenceDialog({ leadIds, leadNames, open, onOpenChange, on
       setSelectedSequenceId(null)
     }
   }, [open])
-
-  // Debug logging
-  useEffect(() => {
-    if (open) {
-      console.log('StartSequenceDialog opened', {
-        isLoading,
-        allSequencesCount: allSequences?.length,
-        activeSequencesCount: sequences.length,
-        allSequences,
-        activeSequences: sequences,
-        error,
-      })
-    }
-  }, [open, isLoading, allSequences, sequences, error])
 
   const handleStart = async () => {
     if (!selectedSequenceId || leadIds.length === 0) return

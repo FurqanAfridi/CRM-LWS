@@ -93,10 +93,10 @@ export default function BookingSettingsPage() {
       {showCalendarIntegration && (
         <CalendarIntegration
           onConnect={(provider, credentials) => {
-            console.log('Calendar connected:', provider, credentials)
+            // Calendar connected: provider, credentials
           }}
           onDisconnect={(provider) => {
-            console.log('Calendar disconnected:', provider)
+            // Calendar disconnected: provider
           }}
         />
       )}
@@ -104,7 +104,7 @@ export default function BookingSettingsPage() {
       {showEmailRouting && (
         <EmailRoutingRules
           onSave={(rules) => {
-            console.log('Routing rules saved:', rules)
+            // Routing rules saved: rules
           }}
         />
       )}
