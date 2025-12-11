@@ -1,0 +1,706 @@
+{
+    "name": "Start Email Sequence Workflow",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "start-sequence",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "webhook-start-sequence",
+        "name": "Start Sequence Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [240, 300],
+        "webhookId": "start-sequence"
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.SUPABASE_URL }}/rest/v1/leads?id=eq.{{ $json.lead_id }}&select=*",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "fetch-lead-data",
+        "name": "Fetch Lead Data",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [460, 300]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.SUPABASE_URL }}/rest/v1/email_sequences?id=eq.{{ $json.sequence_id }}&select=*",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "fetch-sequence-data",
+        "name": "Fetch Sequence Data",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [680, 300]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Parse Supabase responses (they return arrays)\nconst lead = Array.isArray($input.item.json) ? $input.item.json[0] : $input.item.json;\nconst sequence = Array.isArray($('Fetch Sequence Data').item.json) ? $('Fetch Sequence Data').item.json[0] : $('Fetch Sequence Data').item.json;\nconst webhookData = $('Start Sequence Webhook').item.json;\n\n// Get first step from sequence\nconst steps = sequence.steps || [];\nconst firstStep = steps[0] || {};\n\n// Extract domain from lead email or use default\nconst leadEmail = lead.email || '';\nconst domain = leadEmail.split('@')[1] || $env.DOMAIN || 'yourdomain.com';\n\nreturn {\n  json: {\n    lead_id: webhookData.lead_id,\n    sequence_id: webhookData.sequence_id,\n    campaign_id: null, // Will be created by Next.js API\n    lead: lead,\n    sequence: sequence,\n    step_index: 0,\n    step: firstStep,\n    domain: domain,\n    lead_email: leadEmail,\n    lead_name: lead.name || leadEmail,\n    company_name: lead.company_name || '',\n    pain_points: lead.pain_points || [],\n    industry: lead.industry || ''\n  }\n};"
+        },
+        "id": "prepare-sequence-data",
+        "name": "Prepare Sequence Data",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [900, 300]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.SUPABASE_URL }}/rest/v1/domain_warmup_config?domain=eq.{{ $json.domain }}&select=*",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "check-warmup-config",
+        "name": "Check Warmup Config",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [1120, 300]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.SUPABASE_URL }}/rest/v1/domain_warmup?domain=eq.{{ $json.domain }}&order=day_number.desc&limit=1&select=*",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "check-warmup-status",
+        "name": "Check Warmup Status",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [1340, 300]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.SUPABASE_URL }}/rest/v1/deliverability_thresholds?domain=eq.{{ $json.domain }}&select=*",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "check-deliverability-thresholds",
+        "name": "Check Deliverability Thresholds",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [1560, 300]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Check if sending is allowed\nconst warmupConfig = Array.isArray($('Check Warmup Config').item.json) ? $('Check Warmup Config').item.json[0] : $('Check Warmup Config').item.json;\nconst warmupStatus = Array.isArray($('Check Warmup Status').item.json) ? $('Check Warmup Status').item.json[0] : $('Check Warmup Status').item.json;\nconst thresholds = Array.isArray($('Check Deliverability Thresholds').item.json) ? $('Check Deliverability Thresholds').item.json[0] : $('Check Deliverability Thresholds').item.json;\n\nconst data = $input.item.json;\n\n// Check manual override\nif (warmupConfig && warmupConfig.manual_override === 'paused') {\n  return {\n    json: {\n      ...data,\n      can_send: false,\n      block_reason: 'Warmup manually paused',\n      error: 'Domain warmup is paused. Please resume in settings.'\n    }\n  };\n}\n\n// Check daily volume limits\nif (warmupStatus) {\n  const dailyLimit = warmupConfig?.daily_volume_limits?.[warmupStatus.day_number] || warmupStatus.daily_volume_limit || 0;\n  if (warmupStatus.daily_volume_sent >= dailyLimit && dailyLimit > 0) {\n    return {\n      json: {\n        ...data,\n        can_send: false,\n        block_reason: 'Daily volume limit reached',\n        error: `Daily limit of ${dailyLimit} emails reached for day ${warmupStatus.day_number}`\n      }\n    };\n  }\n}\n\n// Check deliverability thresholds\nif (thresholds) {\n  if (warmupStatus && warmupStatus.bounce_rate >= thresholds.bounce_rate_critical) {\n    return {\n      json: {\n        ...data,\n        can_send: false,\n        block_reason: 'Bounce rate critical',\n        error: `Bounce rate ${warmupStatus.bounce_rate}% exceeds critical threshold ${thresholds.bounce_rate_critical}%`\n      }\n    };\n  }\n  \n  if (warmupStatus && warmupStatus.spam_complaint_rate >= thresholds.spam_complaint_critical) {\n    return {\n      json: {\n        ...data,\n        can_send: false,\n        block_reason: 'Spam complaint rate critical',\n        error: `Spam complaint rate ${warmupStatus.spam_complaint_rate}% exceeds critical threshold ${thresholds.spam_complaint_critical}%`\n      }\n    };\n  }\n  \n  if (warmupStatus && warmupStatus.reputation_score < thresholds.min_reputation_score) {\n    return {\n      json: {\n        ...data,\n        can_send: false,\n        block_reason: 'Reputation score too low',\n        error: `Reputation score ${warmupStatus.reputation_score} is below minimum ${thresholds.min_reputation_score}`\n      }\n    };\n  }\n}\n\nreturn {\n  json: {\n    ...data,\n    can_send: true,\n    warmup_status: warmupStatus,\n    warmup_config: warmupConfig\n  }\n};"
+        },
+        "id": "validate-send-permission",
+        "name": "Validate Send Permission",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1780, 300]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "values": [
+              {
+                "value1": "={{ $json.can_send }}",
+                "operation": "equal",
+                "value2": true
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "check-can-send",
+        "name": "Check Can Send",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [2000, 300]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.SUPABASE_URL }}/rest/v1/email_sequence_templates?sequence_id=eq.{{ $json.sequence_id }}&step_index=eq.0&select=*",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "check-ai-personalization",
+        "name": "Check AI Personalization",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [2220, 200]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "values": [
+              {
+                "value1": "={{ Array.isArray($json) && $json.length > 0 ? $json[0].enabled : false }}",
+                "operation": "equal",
+                "value2": true
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "is-personalization-enabled",
+        "name": "Is Personalization Enabled?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [2440, 200]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}/api/outreach/personalize",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"lead_id\": \"{{ $('Prepare Sequence Data').item.json.lead_id }}\",\n  \"template_id\": \"{{ $('Prepare Sequence Data').item.json.step.template_id || $('Prepare Sequence Data').item.json.step.id }}\",\n  \"strategy\": \"{{ Array.isArray($('Check AI Personalization').item.json) && $('Check AI Personalization').item.json[0] ? $('Check AI Personalization').item.json[0].strategy : 'moderate' }}\",\n  \"sequence_id\": \"{{ $('Prepare Sequence Data').item.json.sequence_id }}\",\n  \"step_index\": 0\n}",
+          "options": {}
+        },
+        "id": "call-personalize-api",
+        "name": "Call Personalize API",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [2660, 100]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Merge personalized content or use template\nconst personalizeResult = $('Call Personalize API').item.json;\nconst step = $('Prepare Sequence Data').item.json.step;\nconst data = $('Prepare Sequence Data').item.json;\n\nlet subject, content;\n\nif (personalizeResult.success && personalizeResult.personalized_content) {\n  subject = personalizeResult.subject || step.subject || 'Hello';\n  content = personalizeResult.personalized_content;\n} else {\n  // Fallback to template\n  subject = step.subject || 'Hello';\n  content = step.content || step.template || 'Email content';\n}\n\nreturn {\n  json: {\n    ...data,\n    subject: subject,\n    content: content,\n    personalized: personalizeResult.success || false,\n    confidence_score: personalizeResult.confidence_score || null\n  }\n};"
+        },
+        "id": "prepare-email-content",
+        "name": "Prepare Email Content",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [2880, 200]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}/api/outreach/email-webhook",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"campaign_id\": \"{{ $json.campaign_id }}\",\n  \"lead_id\": \"{{ $json.lead_id }}\",\n  \"sequence_step\": {{ $json.step_index }},\n  \"status\": \"queued\",\n  \"subject\": \"{{ $json.subject }}\",\n  \"content\": \"{{ $json.content }}\"\n}",
+          "options": {}
+        },
+        "id": "notify-email-queued",
+        "name": "Notify Email Queued",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [3100, 200]
+      },
+      {
+        "parameters": {
+          "fromEmail": "={{ $env.SMTP_FROM_EMAIL || 'noreply@yourdomain.com' }}",
+          "toEmail": "={{ $json.lead_email }}",
+          "subject": "={{ $json.subject }}",
+          "emailType": "html",
+          "message": "={{ $json.content }}",
+          "options": {
+            "replyTo": "={{ $env.SMTP_REPLY_TO || 'support@yourdomain.com' }}"
+          }
+        },
+        "id": "send-email",
+        "name": "Send Email",
+        "type": "n8n-nodes-base.emailSend",
+        "typeVersion": 2,
+        "position": [3320, 200],
+        "credentials": {
+          "smtp": {
+            "id": "smtp-credentials",
+            "name": "SMTP"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}/api/outreach/email-webhook",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"message_id\": \"{{ $('Notify Email Queued').item.json.message_id }}\",\n  \"status\": \"sent\",\n  \"sent_at\": \"{{ $now.toISO() }}\"\n}",
+          "options": {}
+        },
+        "id": "notify-email-sent",
+        "name": "Notify Email Sent",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [3540, 200]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.SUPABASE_URL }}/rest/v1/domain_warmup?id=eq.{{ $json.warmup_status.id }}",
+          "method": "PATCH",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=representation"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"daily_volume_sent\": {{ $json.warmup_status.daily_volume_sent + 1 }}\n}",
+          "options": {}
+        },
+        "id": "update-warmup-volume",
+        "name": "Update Warmup Volume",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [3760, 200]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Prepare follow-up scheduling data\nconst data = $input.item.json;\nconst sequence = data.sequence;\nconst steps = sequence.steps || [];\n\n// Get next step if exists\nconst nextStep = steps[1];\nconst daysAfter = nextStep ? (nextStep.days_after || 3) : null;\n\nreturn {\n  json: {\n    ...data,\n    has_followup: !!nextStep,\n    next_step_index: 1,\n    next_step: nextStep,\n    days_until_next: daysAfter\n  }\n};"
+        },
+        "id": "prepare-followup-schedule",
+        "name": "Prepare Follow-up Schedule",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [3980, 200]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "values": [
+              {
+                "value1": "={{ $json.has_followup }}",
+                "operation": "equal",
+                "value2": true
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "has-followup-step",
+        "name": "Has Follow-up Step?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [4200, 200]
+      },
+      {
+        "parameters": {
+          "amount": "={{ $json.days_until_next }}",
+          "unit": "days"
+        },
+        "id": "wait-for-followup",
+        "name": "Wait for Follow-up",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1,
+        "position": [4420, 100]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}/api/outreach/email-webhook",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"campaign_id\": \"{{ $json.campaign_id }}\",\n  \"lead_id\": \"{{ $json.lead_id }}\",\n  \"sequence_step\": {{ $json.next_step_index }},\n  \"status\": \"queued\",\n  \"subject\": \"{{ $json.next_step.subject || 'Follow-up' }}\",\n  \"content\": \"{{ $json.next_step.content || $json.next_step.template || 'Follow-up email' }}\"\n}",
+          "options": {}
+        },
+        "id": "queue-followup-email",
+        "name": "Queue Follow-up Email",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [4640, 100]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={\n  \"success\": true,\n  \"campaign_id\": \"{{ $('Prepare Sequence Data').item.json.campaign_id }}\",\n  \"message\": \"Sequence started successfully\",\n  \"step_sent\": 0,\n  \"next_step_scheduled\": {{ $('Prepare Follow-up Schedule').item.json.has_followup ? $('Prepare Follow-up Schedule').item.json.days_until_next : null }}\n}",
+          "options": {}
+        },
+        "id": "respond-success",
+        "name": "Respond Success",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [4860, 200]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={\n  \"success\": false,\n  \"error\": \"{{ $json.error }}\",\n  \"block_reason\": \"{{ $json.block_reason }}\"\n}",
+          "options": {}
+        },
+        "id": "respond-error",
+        "name": "Respond Error",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [2220, 400]
+      }
+    ],
+    "connections": {
+      "Start Sequence Webhook": {
+        "main": [
+          [
+            {
+              "node": "Fetch Lead Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Lead Data": {
+        "main": [
+          [
+            {
+              "node": "Fetch Sequence Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Sequence Data": {
+        "main": [
+          [
+            {
+              "node": "Prepare Sequence Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Sequence Data": {
+        "main": [
+          [
+            {
+              "node": "Check Warmup Config",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Warmup Config": {
+        "main": [
+          [
+            {
+              "node": "Check Warmup Status",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Warmup Status": {
+        "main": [
+          [
+            {
+              "node": "Check Deliverability Thresholds",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Deliverability Thresholds": {
+        "main": [
+          [
+            {
+              "node": "Validate Send Permission",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate Send Permission": {
+        "main": [
+          [
+            {
+              "node": "Check Can Send",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Can Send": {
+        "main": [
+          [
+            {
+              "node": "Check AI Personalization",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check AI Personalization": {
+        "main": [
+          [
+            {
+              "node": "Is Personalization Enabled?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Personalization Enabled?": {
+        "main": [
+          [
+            {
+              "node": "Call Personalize API",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare Email Content",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call Personalize API": {
+        "main": [
+          [
+            {
+              "node": "Prepare Email Content",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Email Content": {
+        "main": [
+          [
+            {
+              "node": "Notify Email Queued",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Notify Email Queued": {
+        "main": [
+          [
+            {
+              "node": "Send Email",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Email": {
+        "main": [
+          [
+            {
+              "node": "Notify Email Sent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Notify Email Sent": {
+        "main": [
+          [
+            {
+              "node": "Update Warmup Volume",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Warmup Volume": {
+        "main": [
+          [
+            {
+              "node": "Prepare Follow-up Schedule",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Follow-up Schedule": {
+        "main": [
+          [
+            {
+              "node": "Has Follow-up Step?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has Follow-up Step?": {
+        "main": [
+          [
+            {
+              "node": "Wait for Follow-up",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond Success",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Wait for Follow-up": {
+        "main": [
+          [
+            {
+              "node": "Queue Follow-up Email",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Queue Follow-up Email": {
+        "main": [
+          [
+            {
+              "node": "Respond Success",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "pinData": {},
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "staticData": null,
+    "tags": [],
+    "triggerCount": 1,
+    "updatedAt": "2024-01-01T00:00:00.000Z",
+    "versionId": "1"
+  }

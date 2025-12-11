@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useLeads } from '@/lib/hooks/useLeads'
 import { useEmailCampaigns, useStartSequence } from '@/lib/hooks/useOutreach'
-import { Mail, CheckCircle2, Clock, Calendar, MessageSquare, Send, Play, Pause, Building2 } from 'lucide-react'
+import { Mail, CheckCircle2, Clock, Calendar, MessageSquare, Send, Play, Pause, Building2, ArrowUp, ArrowDown } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { StartSequenceDialog } from '@/components/outreach/StartSequenceDialog'
 import { useQueryClient } from '@tanstack/react-query'
@@ -19,6 +19,7 @@ export default function OutreachPage() {
   const queryClient = useQueryClient()
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([])
   const [showStartDialog, setShowStartDialog] = useState(false)
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
 
   // Group leads by outreach status
   const getLeadStatus = (lead: any): OutreachStatus => {
@@ -73,6 +74,101 @@ export default function OutreachPage() {
     setShowStartDialog(true)
   }
 
+  const handleSort = (key: string) => {
+    setSortConfig((current) => {
+      if (current?.key === key) {
+        return current.direction === 'asc' ? { key, direction: 'desc' } : null
+      }
+      return { key, direction: 'asc' }
+    })
+  }
+
+  const filteredLeads = useMemo(() => {
+    return leads?.filter(l => l.email) || []
+  }, [leads])
+
+  const sortedLeads = useMemo(() => {
+    if (!filteredLeads || !sortConfig) return filteredLeads
+
+    return [...filteredLeads].sort((a, b) => {
+      let aValue: any
+      let bValue: any
+
+      // Handle different sort keys
+      switch (sortConfig.key) {
+        case 'name':
+          aValue = a.name || a.email || ''
+          bValue = b.name || b.email || ''
+          break
+        case 'email':
+          aValue = a.email || ''
+          bValue = b.email || ''
+          break
+        case 'company_name':
+          aValue = a.company_name || ''
+          bValue = b.company_name || ''
+          break
+        case 'title':
+          aValue = a.title || ''
+          bValue = b.title || ''
+          break
+        case 'status': {
+          const campaignA = campaigns?.find((c: any) => c.lead_id === a.id && (c.status === 'active' || c.status === 'pending'))
+          const campaignB = campaigns?.find((c: any) => c.lead_id === b.id && (c.status === 'active' || c.status === 'pending'))
+          
+          if (a.outreach_status === 'booked') aValue = 'booked'
+          else if (a.outreach_status === 'responded') aValue = 'responded'
+          else if (campaignA || a.outreach_status === 'in_sequence') aValue = 'sent'
+          else aValue = 'not_started'
+          
+          if (b.outreach_status === 'booked') bValue = 'booked'
+          else if (b.outreach_status === 'responded') bValue = 'responded'
+          else if (campaignB || b.outreach_status === 'in_sequence') bValue = 'sent'
+          else bValue = 'not_started'
+          break
+        }
+        case 'last_contact': {
+          const campaignA = campaigns?.find((c: any) => c.lead_id === a.id)
+          const campaignB = campaigns?.find((c: any) => c.lead_id === b.id)
+          aValue = campaignA?.started_at || ''
+          bValue = campaignB?.started_at || ''
+          break
+        }
+        default:
+          return 0
+      }
+
+      // Handle null/undefined
+      if (aValue == null && bValue == null) return 0
+      if (aValue == null) return 1
+      if (bValue == null) return -1
+
+      // Handle dates
+      if (sortConfig.key === 'last_contact') {
+        const dateA = aValue ? new Date(aValue).getTime() : 0
+        const dateB = bValue ? new Date(bValue).getTime() : 0
+        return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA
+      }
+
+      // Handle strings
+      const aStr = String(aValue).toLowerCase()
+      const bStr = String(bValue).toLowerCase()
+      const comparison = aStr.localeCompare(bStr)
+      return sortConfig.direction === 'asc' ? comparison : -comparison
+    })
+  }, [filteredLeads, sortConfig, campaigns])
+
+  const SortIcon = ({ columnKey }: { columnKey: string }) => {
+    if (sortConfig?.key !== columnKey) {
+      return <ArrowUp className="h-3 w-3 ml-1 opacity-30" />
+    }
+    return sortConfig.direction === 'asc' ? (
+      <ArrowUp className="h-3 w-3 ml-1" />
+    ) : (
+      <ArrowDown className="h-3 w-3 ml-1" />
+    )
+  }
+
   if (leadsLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -85,103 +181,153 @@ export default function OutreachPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-[#004565]">Outreach</h1>
-          <p className="text-[#004565]/80 mt-2 font-medium">Reach out to leads and track responses</p>
-        </div>
-        {selectedLeadIds.length > 0 && (
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-[#004565]/70">
-              {selectedLeadIds.length} lead{selectedLeadIds.length > 1 ? 's' : ''} selected
-            </span>
-            <Button
-              onClick={handleStartOutreach}
-              className="bg-[#004565] hover:bg-[#004565]/90 text-white"
-            >
-              <Send className="h-4 w-4 mr-2" />
-              Start Outreach ({selectedLeadIds.length})
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setSelectedLeadIds([])}
-              className="border-[#004565]/30 text-[#004565]"
-            >
-              Clear Selection
-            </Button>
+      <div className="sticky top-0 z-40 bg-white shadow-sm pb-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-6">
+            <h1 className="text-4xl font-bold text-[#004565]">Outreach</h1>
+            {/* Status Summary - Moved up beside title */}
+            <div className="flex items-center gap-3">
+              <Card className="border-[#004565]/20">
+                <CardContent className="p-3">
+                  <div className="text-xl font-bold text-[#004565]">{leadsByStatus.not_started.length}</div>
+                  <div className="text-xs text-[#004565]/70">Not Started</div>
+                </CardContent>
+              </Card>
+              <Card className="border-blue-200">
+                <CardContent className="p-3">
+                  <div className="text-xl font-bold text-blue-600">{leadsByStatus.sent.length}</div>
+                  <div className="text-xs text-blue-600/70">Waiting</div>
+                </CardContent>
+              </Card>
+              <Card className="border-green-200">
+                <CardContent className="p-3">
+                  <div className="text-xl font-bold text-green-600">{leadsByStatus.responded.length}</div>
+                  <div className="text-xs text-green-600/70">Responded</div>
+                </CardContent>
+              </Card>
+              <Card className="border-purple-200">
+                <CardContent className="p-3">
+                  <div className="text-xl font-bold text-purple-600">{leadsByStatus.booked.length}</div>
+                  <div className="text-xs text-purple-600/70">Booked</div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
-        )}
-      </div>
-
-      {/* Status Summary */}
-      <div className="grid grid-cols-4 gap-4">
-        <Card className="border-[#004565]/20">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-[#004565]">{leadsByStatus.not_started.length}</div>
-            <div className="text-sm text-[#004565]/70">Not Started</div>
-          </CardContent>
-        </Card>
-        <Card className="border-blue-200">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-blue-600">{leadsByStatus.sent.length}</div>
-            <div className="text-sm text-blue-600/70">Waiting for Reply</div>
-          </CardContent>
-        </Card>
-        <Card className="border-green-200">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">{leadsByStatus.responded.length}</div>
-            <div className="text-sm text-green-600/70">Responded</div>
-          </CardContent>
-        </Card>
-        <Card className="border-purple-200">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-purple-600">{leadsByStatus.booked.length}</div>
-            <div className="text-sm text-purple-600/70">Booked</div>
-          </CardContent>
-        </Card>
+          {selectedLeadIds.length > 0 && (
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-[#004565]/70">
+                {selectedLeadIds.length} lead{selectedLeadIds.length > 1 ? 's' : ''} selected
+              </span>
+              <Button
+                onClick={handleStartOutreach}
+                className="bg-[#004565] hover:bg-[#004565]/90 text-white"
+              >
+                <Send className="h-4 w-4 mr-2" />
+                Start Outreach ({selectedLeadIds.length})
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setSelectedLeadIds([])}
+                className="border-[#004565]/30 text-[#004565]"
+              >
+                Clear Selection
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Leads List */}
       <Card className="border-[#004565]/20 shadow-lg">
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b bg-[#004565]/5">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase w-12">
-                    <input
-                      type="checkbox"
-                      checked={selectedLeadIds.length > 0 && selectedLeadIds.length === leads?.filter(l => l.email && getLeadStatus(l) === 'not_started').length}
-                      onChange={(e) => {
-                        const notStartedLeads = leads?.filter(l => l.email && getLeadStatus(l) === 'not_started') || []
-                        if (e.target.checked) {
-                          setSelectedLeadIds(notStartedLeads.map(l => l.id))
-                        } else {
-                          setSelectedLeadIds([])
-                        }
-                      }}
-                      className="h-4 w-4 text-[#004565] cursor-pointer"
-                    />
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Lead</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Email</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Company</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Last Contact</th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold text-[#004565] uppercase">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leads?.filter(l => l.email).length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center">
+          <div className="flex flex-col h-[calc(100vh-280px)]">
+            <div className="overflow-x-scroll overflow-y-auto flex-1">
+              <table className="w-full">
+                <thead className="sticky top-0 z-30 bg-[#004565]/5">
+                  <tr className="border-b bg-[#004565]/5">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase w-12">
+                      <input
+                        type="checkbox"
+                        checked={selectedLeadIds.length > 0 && selectedLeadIds.length === leads?.filter(l => l.email && getLeadStatus(l) === 'not_started').length}
+                        onChange={(e) => {
+                          const notStartedLeads = leads?.filter(l => l.email && getLeadStatus(l) === 'not_started') || []
+                          if (e.target.checked) {
+                            setSelectedLeadIds(notStartedLeads.map(l => l.id))
+                          } else {
+                            setSelectedLeadIds([])
+                          }
+                        }}
+                        className="h-4 w-4 text-[#004565] cursor-pointer"
+                      />
+                    </th>
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase cursor-pointer hover:bg-[#004565]/10 transition-colors"
+                      onClick={() => handleSort('name')}
+                    >
+                      <div className="flex items-center">
+                        Lead
+                        <SortIcon columnKey="name" />
+                      </div>
+                    </th>
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase cursor-pointer hover:bg-[#004565]/10 transition-colors"
+                      onClick={() => handleSort('email')}
+                    >
+                      <div className="flex items-center">
+                        Email
+                        <SortIcon columnKey="email" />
+                      </div>
+                    </th>
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase cursor-pointer hover:bg-[#004565]/10 transition-colors"
+                      onClick={() => handleSort('company_name')}
+                    >
+                      <div className="flex items-center">
+                        Company
+                        <SortIcon columnKey="company_name" />
+                      </div>
+                    </th>
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase cursor-pointer hover:bg-[#004565]/10 transition-colors"
+                      onClick={() => handleSort('title')}
+                    >
+                      <div className="flex items-center">
+                        Title
+                        <SortIcon columnKey="title" />
+                      </div>
+                    </th>
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase cursor-pointer hover:bg-[#004565]/10 transition-colors"
+                      onClick={() => handleSort('status')}
+                    >
+                      <div className="flex items-center">
+                        Status
+                        <SortIcon columnKey="status" />
+                      </div>
+                    </th>
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase cursor-pointer hover:bg-[#004565]/10 transition-colors"
+                      onClick={() => handleSort('last_contact')}
+                    >
+                      <div className="flex items-center">
+                        Last Contact
+                        <SortIcon columnKey="last_contact" />
+                      </div>
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold text-[#004565] uppercase">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedLeads.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-12 text-center">
                       <Mail className="h-12 w-12 mx-auto text-[#004565]/50 mb-4" />
                       <p className="text-[#004565] font-medium mb-2">No leads with email addresses</p>
                       <p className="text-sm text-[#004565]/70">Add email addresses to leads to start outreach.</p>
                     </td>
                   </tr>
                 ) : (
-                  leads?.filter(l => l.email).map((lead) => {
+                  sortedLeads.map((lead) => {
                     const status = getLeadStatus(lead)
                     const campaign = campaigns?.find((c: any) => c.lead_id === lead.id)
                     const isSelected = selectedLeadIds.includes(lead.id)
@@ -215,6 +361,9 @@ export default function OutreachPage() {
                           ) : (
                             '—'
                           )}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-[#004565]/70">
+                          {lead.title || '—'}
                         </td>
                         <td className="px-6 py-4">
                           {getStatusBadge(status)}
@@ -276,6 +425,7 @@ export default function OutreachPage() {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         </CardContent>
       </Card>

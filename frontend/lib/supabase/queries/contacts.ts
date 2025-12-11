@@ -13,7 +13,7 @@ export interface ContactFilters {
 export async function getContacts(filters?: ContactFilters) {
   let query = supabase
     .from('contacts')
-    .select('id, first_name, last_name, email, phone, job_title, department, company_id, is_decision_maker, created_at, updated_at')
+    .select('id, first_name, last_name, email, phone, job_title, department, company_id, company_name, is_decision_maker, created_at, updated_at')
     .order('created_at', { ascending: false })
     .limit(1000)
 

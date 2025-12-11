@@ -1,0 +1,613 @@
+{
+    "name": "Email Outreach Pipeline",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "start-sequence",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "webhook-start-sequence",
+        "name": "Start Sequence Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [240, 300],
+        "webhookId": "start-sequence"
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "pause-sequence",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "webhook-pause-sequence",
+        "name": "Pause Sequence Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [240, 500],
+        "webhookId": "pause-sequence"
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "resume-sequence",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "webhook-resume-sequence",
+        "name": "Resume Sequence Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [240, 700],
+        "webhookId": "resume-sequence"
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "send-manual-email",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "webhook-send-manual",
+        "name": "Send Manual Email Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [240, 900],
+        "webhookId": "send-manual-email"
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "personalize",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "webhook-personalize",
+        "name": "Personalize Email Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [240, 1100],
+        "webhookId": "personalize"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Get lead data from Supabase\nconst leadId = $input.item.json.lead_id;\nconst sequenceId = $input.item.json.sequence_id;\n\n// Fetch lead details from Supabase\n// You'll need to configure Supabase credentials\nconst supabaseUrl = 'YOUR_SUPABASE_URL';\nconst supabaseKey = 'YOUR_SUPABASE_KEY';\n\n// This is a placeholder - you'll need to use HTTP Request node to fetch from Supabase\nreturn {\n  json: {\n    lead_id: leadId,\n    sequence_id: sequenceId,\n    step: 0,\n    status: 'active'\n  }\n};"
+        },
+        "id": "process-start-sequence",
+        "name": "Process Start Sequence",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [460, 300]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}/api/outreach/email-webhook",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"campaign_id\": \"{{ $json.campaign_id }}\",\n  \"lead_id\": \"{{ $json.lead_id }}\",\n  \"sequence_step\": {{ $json.step }},\n  \"status\": \"queued\",\n  \"subject\": \"{{ $json.subject }}\",\n  \"content\": \"{{ $json.content }}\"\n}",
+          "options": {}
+        },
+        "id": "notify-email-queued",
+        "name": "Notify Email Queued",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [680, 300]
+      },
+      {
+        "parameters": {
+          "model": "gpt-4",
+          "options": {
+            "temperature": 0.7,
+            "maxTokens": 1000
+          },
+          "messages": {
+            "values": [
+              {
+                "role": "system",
+                "content": "You are an expert email copywriter specializing in personalized B2B outreach. Create engaging, personalized email content based on lead information."
+              },
+              {
+                "role": "user",
+                "content": "=Personalize this email template for the lead:\n\nTemplate: {{ $json.template }}\nLead Name: {{ $json.lead_name }}\nCompany: {{ $json.company_name }}\nIndustry: {{ $json.industry }}\nPain Points: {{ $json.pain_points }}\n\nCreate a personalized subject line and email body that addresses their specific needs."
+              }
+            ]
+          }
+        },
+        "id": "ai-personalize",
+        "name": "AI Personalize Email",
+        "type": "@n8n/n8n-nodes-langchain.openAi",
+        "typeVersion": 1,
+        "position": [460, 1100],
+        "credentials": {
+          "openAiApi": {
+            "id": "openai-credentials",
+            "name": "OpenAI API"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}/api/outreach/personalize",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"personalized_content\": \"{{ $json.choices[0].message.content }}\",\n  \"subject\": \"{{ $json.subject }}\"\n}",
+          "options": {}
+        },
+        "id": "return-personalized",
+        "name": "Return Personalized",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [680, 1100]
+      },
+      {
+        "parameters": {
+          "fromEmail": "={{ $env.SMTP_FROM_EMAIL || 'noreply@yourdomain.com' }}",
+          "toEmail": "={{ $json.lead_email }}",
+          "subject": "={{ $json.subject }}",
+          "emailType": "html",
+          "message": "={{ $json.content }}",
+          "options": {
+            "replyTo": "={{ $env.SMTP_REPLY_TO || 'support@yourdomain.com' }}"
+          }
+        },
+        "id": "send-email",
+        "name": "Send Email",
+        "type": "n8n-nodes-base.emailSend",
+        "typeVersion": 2,
+        "position": [900, 300],
+        "credentials": {
+          "smtp": {
+            "id": "smtp-credentials",
+            "name": "SMTP"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}/api/outreach/email-webhook",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"message_id\": \"{{ $json.message_id }}\",\n  \"status\": \"sent\",\n  \"sent_at\": \"{{ $now.toISO() }}\"\n}",
+          "options": {}
+        },
+        "id": "notify-email-sent",
+        "name": "Notify Email Sent",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [1120, 300]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "values": [
+              {
+                "value1": "={{ $json.status }}",
+                "operation": "equal",
+                "value2": "active"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "check-campaign-active",
+        "name": "Check Campaign Active",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [1340, 300]
+      },
+      {
+        "parameters": {
+          "amount": 3,
+          "unit": "days"
+        },
+        "id": "wait-3-days",
+        "name": "Wait 3 Days",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1,
+        "position": [1560, 200]
+      },
+      {
+        "parameters": {
+          "amount": 5,
+          "unit": "days"
+        },
+        "id": "wait-5-days",
+        "name": "Wait 5 Days",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1,
+        "position": [1560, 400]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}/api/outreach/email-webhook",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"campaign_id\": \"{{ $json.campaign_id }}\",\n  \"lead_id\": \"{{ $json.lead_id }}\",\n  \"sequence_step\": {{ $json.step + 1 }},\n  \"status\": \"queued\",\n  \"subject\": \"{{ $json.followup_subject }}\",\n  \"content\": \"{{ $json.followup_content }}\"\n}",
+          "options": {}
+        },
+        "id": "queue-followup",
+        "name": "Queue Follow-up",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [1780, 300]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}/api/outreach/booking-webhook",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"lead_id\": \"{{ $json.lead_id }}\",\n  \"campaign_id\": \"{{ $json.campaign_id }}\",\n  \"calendar_link\": \"{{ $json.calendar_link }}\",\n  \"booking_status\": \"link_sent\",\n  \"calendar_provider\": \"calendly\"\n}",
+          "options": {}
+        },
+        "id": "send-booking-link",
+        "name": "Send Booking Link",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [1780, 500]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={\n  \"success\": true,\n  \"campaign_id\": \"{{ $json.campaign_id }}\",\n  \"message\": \"Sequence started successfully\"\n}",
+          "options": {}
+        },
+        "id": "respond-start",
+        "name": "Respond Start",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [2000, 300]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={\n  \"success\": true,\n  \"message\": \"Sequence paused successfully\"\n}",
+          "options": {}
+        },
+        "id": "respond-pause",
+        "name": "Respond Pause",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [460, 500]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={\n  \"success\": true,\n  \"message\": \"Sequence resumed successfully\"\n}",
+          "options": {}
+        },
+        "id": "respond-resume",
+        "name": "Respond Resume",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [460, 700]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={\n  \"success\": true,\n  \"personalized_content\": \"{{ $json.choices[0].message.content }}\",\n  \"subject\": \"{{ $json.subject }}\"\n}",
+          "options": {}
+        },
+        "id": "respond-personalize",
+        "name": "Respond Personalize",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [900, 1100]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "email-events",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "webhook-email-events",
+        "name": "Email Events Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [240, 1300],
+        "webhookId": "email-events"
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}/api/outreach/email-webhook",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"message_id\": \"{{ $json.message_id }}\",\n  \"status\": \"{{ $json.event_type }}\",\n  \"{{ $json.event_type }}_at\": \"{{ $now.toISO() }}\",\n  \"bounce_reason\": \"{{ $json.bounce_reason }}\"\n}",
+          "options": {}
+        },
+        "id": "forward-email-event",
+        "name": "Forward Email Event",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [460, 1300]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "booking-events",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "webhook-booking-events",
+        "name": "Booking Events Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [240, 1500],
+        "webhookId": "booking-events"
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}/api/outreach/booking-webhook",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"booking_id\": \"{{ $json.booking_id }}\",\n  \"lead_id\": \"{{ $json.lead_id }}\",\n  \"campaign_id\": \"{{ $json.campaign_id }}\",\n  \"booking_status\": \"{{ $json.status }}\",\n  \"scheduled_time\": \"{{ $json.scheduled_time }}\",\n  \"meeting_id\": \"{{ $json.meeting_id }}\"\n}",
+          "options": {}
+        },
+        "id": "forward-booking-event",
+        "name": "Forward Booking Event",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [460, 1500]
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "hours",
+                "hoursInterval": 1
+              }
+            ]
+          }
+        },
+        "id": "schedule-warmup-check",
+        "name": "Schedule Warm-up Check",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.1,
+        "position": [240, 1700]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}/api/outreach/update-warmup",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"domain\": \"{{ $env.DOMAIN || 'yourdomain.com' }}\",\n  \"day_number\": {{ $json.day_number }},\n  \"daily_volume_sent\": {{ $json.daily_volume_sent }},\n  \"daily_volume_limit\": {{ $json.daily_volume_limit }},\n  \"reputation_score\": {{ $json.reputation_score }},\n  \"spf_status\": \"{{ $json.spf_status }}\",\n  \"dkim_status\": \"{{ $json.dkim_status }}\",\n  \"dmarc_status\": \"{{ $json.dmarc_status }}\",\n  \"bounce_rate\": {{ $json.bounce_rate }},\n  \"spam_complaint_rate\": {{ $json.spam_complaint_rate }}\n}",
+          "options": {}
+        },
+        "id": "update-warmup-status",
+        "name": "Update Warm-up Status",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [460, 1700]
+      }
+    ],
+    "connections": {
+      "Start Sequence Webhook": {
+        "main": [
+          [
+            {
+              "node": "Process Start Sequence",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Process Start Sequence": {
+        "main": [
+          [
+            {
+              "node": "Notify Email Queued",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Notify Email Queued": {
+        "main": [
+          [
+            {
+              "node": "Send Email",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Email": {
+        "main": [
+          [
+            {
+              "node": "Notify Email Sent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Notify Email Sent": {
+        "main": [
+          [
+            {
+              "node": "Check Campaign Active",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Campaign Active": {
+        "main": [
+          [
+            {
+              "node": "Wait 3 Days",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Wait 5 Days",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Wait 3 Days": {
+        "main": [
+          [
+            {
+              "node": "Queue Follow-up",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Wait 5 Days": {
+        "main": [
+          [
+            {
+              "node": "Send Booking Link",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Queue Follow-up": {
+        "main": [
+          [
+            {
+              "node": "Respond Start",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Pause Sequence Webhook": {
+        "main": [
+          [
+            {
+              "node": "Respond Pause",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Resume Sequence Webhook": {
+        "main": [
+          [
+            {
+              "node": "Respond Resume",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Manual Email Webhook": {
+        "main": [
+          [
+            {
+              "node": "Send Email",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Personalize Email Webhook": {
+        "main": [
+          [
+            {
+              "node": "AI Personalize Email",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Personalize Email": {
+        "main": [
+          [
+            {
+              "node": "Return Personalized",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Return Personalized": {
+        "main": [
+          [
+            {
+              "node": "Respond Personalize",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Email Events Webhook": {
+        "main": [
+          [
+            {
+              "node": "Forward Email Event",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Booking Events Webhook": {
+        "main": [
+          [
+            {
+              "node": "Forward Booking Event",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Schedule Warm-up Check": {
+        "main": [
+          [
+            {
+              "node": "Update Warm-up Status",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "pinData": {},
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "staticData": null,
+    "tags": [],
+    "triggerCount": 6,
+    "updatedAt": "2024-01-01T00:00:00.000Z",
+    "versionId": "1"
+  }

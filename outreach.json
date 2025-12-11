@@ -1,0 +1,818 @@
+{
+    "name": "Complete Outreach Workflow",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "start-sequence",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "webhook-start-sequence",
+        "name": "Start Sequence Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [240, 300],
+        "webhookId": "start-sequence"
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.SUPABASE_URL }}/rest/v1/leads?id=eq.{{ $json.lead_id }}&select=*",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "get-lead",
+        "name": "Get Lead from Supabase",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [460, 300]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.SUPABASE_URL }}/rest/v1/email_sequences?id=eq.{{ $json.sequence_id }}&select=*",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "get-sequence",
+        "name": "Get Sequence from Supabase",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [680, 300]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Parse data\nconst webhookData = $('Start Sequence Webhook').item.json;\nconst leadData = $('Get Lead from Supabase').item.json;\nconst sequenceData = $('Get Sequence from Supabase').item.json;\n\nconst lead = Array.isArray(leadData) ? leadData[0] : leadData;\nconst sequence = Array.isArray(sequenceData) ? sequenceData[0] : sequenceData;\n\n// Get first step\nconst steps = sequence.steps || [];\nconst firstStep = steps[0] || {};\n\n// Extract domain\nconst leadEmail = lead.email || '';\n\nreturn {\n  json: {\n    lead_id: webhookData.lead_id,\n    sequence_id: webhookData.sequence_id,\n    lead: lead,\n    sequence: sequence,\n    step_index: 0,\n    step: firstStep,\n    lead_email: leadEmail,\n    lead_name: lead.name || leadEmail,\n    company_name: lead.company_name || '',\n    subject: firstStep.subject || 'Hello from ' + (lead.company_name || 'us'),\n    content: firstStep.content || firstStep.template || 'Hello ' + (lead.name || 'there') + ',\\n\\nI hope this email finds you well...'\n  }\n};"
+        },
+        "id": "prepare-initial-email",
+        "name": "Prepare Initial Email",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [900, 300]
+      },
+      {
+        "parameters": {
+          "fromEmail": "={{ $env.SMTP_FROM_EMAIL || 'noreply@yourdomain.com' }}",
+          "toEmail": "={{ $json.lead_email }}",
+          "subject": "={{ $json.subject }}",
+          "emailType": "html",
+          "message": "={{ $json.content.replace(/\\n/g, '<br>') }}",
+          "options": {
+            "replyTo": "={{ $env.SMTP_REPLY_TO || 'support@yourdomain.com' }}"
+          }
+        },
+        "id": "send-initial-email",
+        "name": "Send Initial Email",
+        "type": "n8n-nodes-base.emailSend",
+        "typeVersion": 2,
+        "position": [1120, 300],
+        "credentials": {
+          "smtp": {
+            "id": "smtp-credentials",
+            "name": "SMTP"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}/api/outreach/email-webhook",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"campaign_id\": \"{{ $json.campaign_id }}\",\n  \"lead_id\": \"{{ $json.lead_id }}\",\n  \"sequence_step\": {{ $json.step_index }},\n  \"status\": \"sent\",\n  \"subject\": \"{{ $json.subject }}\",\n  \"content\": \"{{ $json.content }}\",\n  \"sent_at\": \"{{ $now.toISO() }}\"\n}",
+          "options": {}
+        },
+        "id": "save-email-sent",
+        "name": "Save Email to Database",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [1340, 300]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.SUPABASE_URL }}/rest/v1/followup_queue",
+          "method": "POST",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=representation"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"lead_id\": \"{{ $json.lead_id }}\",\n  \"campaign_id\": \"{{ $json.campaign_id }}\",\n  \"scheduled_for\": \"{{ $now.plus({ days: 3 }).toISO() }}\",\n  \"followup_number\": 1,\n  \"status\": \"pending\"\n}",
+          "options": {}
+        },
+        "id": "schedule-followup-1",
+        "name": "Schedule Follow-up #1",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [1560, 300]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={\n  \"success\": true,\n  \"message\": \"Outreach started successfully\",\n  \"lead_id\": \"{{ $json.lead_id }}\",\n  \"sequence_id\": \"{{ $json.sequence_id }}\"\n}",
+          "options": {}
+        },
+        "id": "respond-success",
+        "name": "Respond Success",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [1780, 300]
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "hours",
+                "hoursInterval": 1
+              }
+            ]
+          }
+        },
+        "id": "schedule-check-followups",
+        "name": "Check Follow-ups (Every Hour)",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.1,
+        "position": [240, 600]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/get_leads_needing_followup",
+          "method": "POST",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={}",
+          "options": {}
+        },
+        "id": "get-leads-needing-followup",
+        "name": "Get Leads Needing Follow-up",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [460, 600]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Split items for each lead\nconst items = $input.all();\nreturn items.map(item => item.json);"
+        },
+        "id": "split-leads",
+        "name": "Split Leads",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [680, 600]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.SUPABASE_URL }}/rest/v1/leads?id=eq.{{ $json.lead_id }}&select=*",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "get-lead-details",
+        "name": "Get Lead Details",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [900, 600]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Prepare follow-up email\nconst followupData = $input.item.json;\nconst leadData = $('Get Lead Details').item.json;\n\nconst lead = Array.isArray(leadData) ? leadData[0] : leadData;\nconst followupNum = followupData.followup_number || 1;\n\n// Different follow-up messages based on number\nconst followupMessages = {\n  1: `Hi ${lead.name || 'there'},\\n\\nI wanted to follow up on my previous email. I believe our solution could really help ${lead.company_name || 'your company'}...\\n\\nBest regards`,\n  2: `Hi ${lead.name || 'there'},\\n\\nI understand you're busy, but I wanted to make sure this didn't get lost in your inbox. Would you be open to a quick conversation?\\n\\nBest regards`,\n  3: `Hi ${lead.name || 'there'},\\n\\nThis will be my final follow-up. I don't want to be a nuisance, but I genuinely believe we can help. Would you prefer I reach out at a different time?\\n\\nBest regards`\n};\n\nconst subjects = {\n  1: `Following up: ${followupData.lead_name || 'Quick question'}`,\n  2: `Re: ${followupData.lead_name || 'Quick question'}`,\n  3: `Last follow-up: ${followupData.lead_name || 'Quick question'}`\n};\n\nreturn {\n  json: {\n    lead_id: followupData.lead_id,\n    campaign_id: followupData.campaign_id,\n    lead_email: followupData.lead_email,\n    lead_name: followupData.lead_name,\n    followup_number: followupNum,\n    subject: subjects[followupNum] || `Follow-up ${followupNum}`,\n    content: followupMessages[followupNum] || `Hi ${lead.name || 'there'},\\n\\nFollowing up on my previous email...`\n  }\n};"
+        },
+        "id": "prepare-followup-email",
+        "name": "Prepare Follow-up Email",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1120, 600]
+      },
+      {
+        "parameters": {
+          "fromEmail": "={{ $env.SMTP_FROM_EMAIL || 'noreply@yourdomain.com' }}",
+          "toEmail": "={{ $json.lead_email }}",
+          "subject": "={{ $json.subject }}",
+          "emailType": "html",
+          "message": "={{ $json.content.replace(/\\n/g, '<br>') }}",
+          "options": {
+            "replyTo": "={{ $env.SMTP_REPLY_TO || 'support@yourdomain.com' }}"
+          }
+        },
+        "id": "send-followup-email",
+        "name": "Send Follow-up Email",
+        "type": "n8n-nodes-base.emailSend",
+        "typeVersion": 2,
+        "position": [1340, 600],
+        "credentials": {
+          "smtp": {
+            "id": "smtp-credentials",
+            "name": "SMTP"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}/api/outreach/email-webhook",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"campaign_id\": \"{{ $json.campaign_id }}\",\n  \"lead_id\": \"{{ $json.lead_id }}\",\n  \"sequence_step\": {{ $json.followup_number }},\n  \"status\": \"sent\",\n  \"subject\": \"{{ $json.subject }}\",\n  \"content\": \"{{ $json.content }}\",\n  \"sent_at\": \"{{ $now.toISO() }}\"\n}",
+          "options": {}
+        },
+        "id": "save-followup-email",
+        "name": "Save Follow-up Email",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [1560, 600]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.SUPABASE_URL }}/rest/v1/followup_queue?lead_id=eq.{{ $json.lead_id }}&followup_number=eq.{{ $json.followup_number }}&status=eq.pending",
+          "method": "PATCH",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=representation"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"status\": \"sent\",\n  \"updated_at\": \"{{ $now.toISO() }}\"\n}",
+          "options": {}
+        },
+        "id": "update-followup-status",
+        "name": "Update Follow-up Status",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [1780, 600]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "values": [
+              {
+                "value1": "={{ $json.followup_number }}",
+                "operation": "smaller",
+                "value2": 3
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "check-if-more-followups",
+        "name": "Schedule Next Follow-up?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [2000, 600]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.SUPABASE_URL }}/rest/v1/followup_queue",
+          "method": "POST",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=representation"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"lead_id\": \"{{ $json.lead_id }}\",\n  \"campaign_id\": \"{{ $json.campaign_id }}\",\n  \"scheduled_for\": \"{{ $now.plus({ days: $json.followup_number === 1 ? 5 : 7 }).toISO() }}\",\n  \"followup_number\": {{ $json.followup_number + 1 }},\n  \"status\": \"pending\"\n}",
+          "options": {}
+        },
+        "id": "schedule-next-followup",
+        "name": "Schedule Next Follow-up",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [2220, 500]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "email-events",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "webhook-email-events",
+        "name": "Email Events Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [240, 900],
+        "webhookId": "email-events"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Process email event from email provider (SendGrid, Mailgun, etc.)\nconst event = $input.item.json;\n\n// Map event types to our statuses\nconst statusMap = {\n  'sent': 'sent',\n  'delivered': 'delivered',\n  'opened': 'opened',\n  'clicked': 'opened',\n  'bounce': 'bounced',\n  'dropped': 'failed',\n  'deferred': 'sent',\n  'replied': 'replied',\n  'unsubscribe': 'opened'\n};\n\n// Extract message ID (varies by provider)\nconst messageId = event['sg_message_id'] || event['message-id'] || event.message_id || event.id;\nconst email = event.email || event.recipient || event['event-data']?.recipient || '';\nconst eventType = event.event || event.type || event['event-data']?.event || 'unknown';\n\nreturn {\n  json: {\n    message_id: messageId,\n    email: email,\n    event_type: eventType,\n    status: statusMap[eventType] || 'sent',\n    timestamp: event.timestamp || event.time || new Date().toISOString()\n  }\n};"
+        },
+        "id": "process-email-event",
+        "name": "Process Email Event",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [460, 900]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.SUPABASE_URL }}/rest/v1/leads?email=eq.{{ $json.email }}&select=id",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "find-lead-by-email",
+        "name": "Find Lead by Email",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [680, 900]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}/api/outreach/email-webhook",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"lead_id\": \"{{ Array.isArray($('Find Lead by Email').item.json) ? $('Find Lead by Email').item.json[0].id : $('Find Lead by Email').item.json.id }}\",\n  \"status\": \"{{ $json.status }}\",\n  \"{{ $json.status }}_at\": \"{{ $json.timestamp }}\"\n}",
+          "options": {}
+        },
+        "id": "update-email-status",
+        "name": "Update Email Status via API",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [900, 900]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "values": [
+              {
+                "value1": "={{ $json.status }}",
+                "operation": "equal",
+                "value2": "replied"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "check-if-replied",
+        "name": "Did Lead Reply?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [1120, 900]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.SUPABASE_URL }}/rest/v1/followup_queue?lead_id=eq.{{ Array.isArray($('Find Lead by Email').item.json) ? $('Find Lead by Email').item.json[0].id : $('Find Lead by Email').item.json.id }}&status=eq.pending",
+          "method": "PATCH",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=representation"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"status\": \"cancelled\",\n  \"updated_at\": \"{{ $now.toISO() }}\"\n}",
+          "options": {}
+        },
+        "id": "cancel-pending-followups",
+        "name": "Cancel Pending Follow-ups",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [1340, 800]
+      },
+      {
+        "parameters": {
+          "url": "={{ $env.SUPABASE_URL }}/rest/v1/leads?id=eq.{{ Array.isArray($('Find Lead by Email').item.json) ? $('Find Lead by Email').item.json[0].id : $('Find Lead by Email').item.json.id }}",
+          "method": "PATCH",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=representation"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"outreach_status\": \"responded\",\n  \"updated_at\": \"{{ $now.toISO() }}\"\n}",
+          "options": {}
+        },
+        "id": "update-lead-status-replied",
+        "name": "Update Lead Status to Responded",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [1340, 1000]
+      }
+    ],
+    "connections": {
+      "Start Sequence Webhook": {
+        "main": [
+          [
+            {
+              "node": "Get Lead from Supabase",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Lead from Supabase": {
+        "main": [
+          [
+            {
+              "node": "Get Sequence from Supabase",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Sequence from Supabase": {
+        "main": [
+          [
+            {
+              "node": "Prepare Initial Email",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Initial Email": {
+        "main": [
+          [
+            {
+              "node": "Send Initial Email",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Initial Email": {
+        "main": [
+          [
+            {
+              "node": "Save Email to Database",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Save Email to Database": {
+        "main": [
+          [
+            {
+              "node": "Schedule Follow-up #1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Schedule Follow-up #1": {
+        "main": [
+          [
+            {
+              "node": "Respond Success",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Follow-ups (Every Hour)": {
+        "main": [
+          [
+            {
+              "node": "Get Leads Needing Follow-up",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Leads Needing Follow-up": {
+        "main": [
+          [
+            {
+              "node": "Split Leads",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Split Leads": {
+        "main": [
+          [
+            {
+              "node": "Get Lead Details",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Lead Details": {
+        "main": [
+          [
+            {
+              "node": "Prepare Follow-up Email",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Follow-up Email": {
+        "main": [
+          [
+            {
+              "node": "Send Follow-up Email",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Follow-up Email": {
+        "main": [
+          [
+            {
+              "node": "Save Follow-up Email",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Save Follow-up Email": {
+        "main": [
+          [
+            {
+              "node": "Update Follow-up Status",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Follow-up Status": {
+        "main": [
+          [
+            {
+              "node": "Schedule Next Follow-up?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Schedule Next Follow-up?": {
+        "main": [
+          [
+            {
+              "node": "Schedule Next Follow-up",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Email Events Webhook": {
+        "main": [
+          [
+            {
+              "node": "Process Email Event",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Process Email Event": {
+        "main": [
+          [
+            {
+              "node": "Find Lead by Email",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Find Lead by Email": {
+        "main": [
+          [
+            {
+              "node": "Update Email Status via API",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Email Status via API": {
+        "main": [
+          [
+            {
+              "node": "Did Lead Reply?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Did Lead Reply?": {
+        "main": [
+          [
+            {
+              "node": "Cancel Pending Follow-ups",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Update Lead Status to Responded",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      }
+    },
+    "pinData": {},
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "staticData": null,
+    "tags": [],
+    "triggerCount": 3,
+    "updatedAt": "2024-12-10T00:00:00.000Z",
+    "versionId": "1"
+  }
