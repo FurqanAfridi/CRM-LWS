@@ -4,7 +4,7 @@ import { getEmailSequenceById } from '@/lib/supabase/queries/outreach'
 import { getPersonalizationConfig } from '@/lib/supabase/queries/outreach'
 
 // n8n webhook URL for generate preview
-const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_GENERATE_PREVIEW || 'https://auto.lincolnwaste.co/webhook/generate-preview'
+const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_GENERATE_PREVIEW || 'http://auto.lincolnwaste.co/webhook/emailpreview'
 
 export async function POST(request: NextRequest) {
   try {

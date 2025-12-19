@@ -7,8 +7,6 @@ export async function GET(request: NextRequest) {
 
     const status = {
       calendly: integrations.find(i => i.provider === 'calendly') || null,
-      google: integrations.find(i => i.provider === 'google') || null,
-      outlook: integrations.find(i => i.provider === 'outlook') || null,
     }
 
     return NextResponse.json({

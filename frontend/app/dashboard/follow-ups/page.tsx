@@ -4,107 +4,150 @@ import { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useRespondedLeads, useLeadConversation, usePauseSequence, useResumeSequence } from '@/lib/hooks/useOutreach'
-import { MessageSquare, Mail, Clock, Calendar, User, Building2, ArrowRight, Reply, Pause, Play, CheckCircle2, Filter, Search, Loader2 } from 'lucide-react'
+import { useFollowupQueue, useLeadConversation, usePauseSequence, useResumeSequence, useGenerateResponse, useSendManualEmail } from '@/lib/hooks/useOutreach'
+import { MessageSquare, Mail, Clock, Calendar, User, Building2, ArrowRight, Reply, Pause, Play, CheckCircle2, Filter, Search, Loader2, RefreshCw, Send } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 
-interface ResponseLead {
-  lead_id: string
-  lead_name: string
-  lead_email: string
-  company_name: string | null
-  campaign_id: string | null
-  sequence_id: string | null
-  sequence_name: string | null
-  campaign_status: string
-  current_step: number
-  total_emails_sent: number
-  reply_count: number
-  last_replied_at: string | null
-  last_email_sent_at: string | null
-  started_at: string | null
-  replied_messages: Array<{
-    id: string
-    subject: string
-    content: string
-    sequence_step: number
-    sent_at: string
-    replied_at: string
-  }>
-}
+type FollowupStatus = 'pending' | 'sent' | 'cancelled' | 'skipped'
 
 export default function FollowUpsPage() {
-  const { data: respondedLeads, isLoading: leadsLoading, error } = useRespondedLeads()
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'sent' | 'cancelled' | 'skipped'>('all')
+  const [searchTerm, setSearchTerm] = useState('')
+  const { data: followupQueue, isLoading: leadsLoading, error } = useFollowupQueue(
+    filterStatus !== 'all' ? { status: filterStatus } : undefined
+  )
   const pauseSequence = usePauseSequence()
   const resumeSequence = useResumeSequence()
-  const [selectedLead, setSelectedLead] = useState<ResponseLead | null>(null)
-  const [showReplyDialog, setShowReplyDialog] = useState(false)
+  const generateResponse = useGenerateResponse()
+  const sendEmail = useSendManualEmail()
+  const [selectedFollowup, setSelectedFollowup] = useState<any>(null)
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'paused' | 'completed'>('all')
-  const [replySubject, setReplySubject] = useState('')
-  const [replyContent, setReplyContent] = useState('')
+  const [showRespondDialog, setShowRespondDialog] = useState(false)
+  const [suggestedResponse, setSuggestedResponse] = useState<{ subject: string; content: string } | null>(null)
+  const [userChanges, setUserChanges] = useState<string>('')
+  const [isGeneratingResponse, setIsGeneratingResponse] = useState(false)
 
-  const filteredLeads = (respondedLeads || []).filter((lead: ResponseLead) => {
+  const filteredFollowups = (followupQueue || []).filter((item) => {
     const matchesSearch = 
-      lead.lead_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.lead_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (lead.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
+      (item.lead?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+      (item.lead?.email?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+      (item.lead?.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+      (item.sequence?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
     
-    const matchesFilter = 
-      filterStatus === 'all' ||
-      (filterStatus === 'active' && lead.campaign_status === 'active') ||
-      (filterStatus === 'paused' && lead.campaign_status === 'paused') ||
-      (filterStatus === 'completed' && lead.campaign_status === 'completed')
-    
-    return matchesSearch && matchesFilter
+    return matchesSearch
   })
 
-  const handlePauseSequence = async (campaignId: string) => {
-    try {
-      await pauseSequence.mutateAsync({ campaign_id: campaignId })
-    } catch (error: any) {
-      alert(error.message || 'Failed to pause sequence')
-    }
-  }
+  const pendingCount = (followupQueue || []).filter((item) => item.status === 'pending').length
+  const sentCount = (followupQueue || []).filter((item) => item.status === 'sent').length
+  const cancelledCount = (followupQueue || []).filter((item) => item.status === 'cancelled').length
+  const skippedCount = (followupQueue || []).filter((item) => item.status === 'skipped').length
 
-  const handleResumeSequence = async (campaignId: string) => {
-    try {
-      await resumeSequence.mutateAsync({ campaign_id: campaignId })
-    } catch (error: any) {
-      alert(error.message || 'Failed to resume sequence')
-    }
-  }
-
-  const handleReply = async () => {
-    if (!selectedLead || !replySubject || !replyContent) {
-      alert('Please fill in both subject and message')
-      return
-    }
-
-    // TODO: Implement send reply API call
-    alert('Reply functionality will be implemented when the API is ready')
-    setShowReplyDialog(false)
-    setReplySubject('')
-    setReplyContent('')
-  }
-
-  const handleViewDetails = (lead: ResponseLead) => {
-    setSelectedLead(lead)
-    // Auto-populate reply subject if there's a previous message
-    if (lead.replied_messages.length > 0) {
-      const lastMessage = lead.replied_messages[lead.replied_messages.length - 1]
-      setReplySubject(`Re: ${lastMessage.subject || 'Your inquiry'}`)
-    }
+  const handleViewDetails = (item: any) => {
+    setSelectedFollowup(item)
     setShowDetailsDialog(true)
   }
 
-  const activeCount = (respondedLeads || []).filter((l: ResponseLead) => l.campaign_status === 'active').length
-  const pausedCount = (respondedLeads || []).filter((l: ResponseLead) => l.campaign_status === 'paused').length
-  const completedCount = (respondedLeads || []).filter((l: ResponseLead) => l.campaign_status === 'completed').length
+  const getDaysSinceScheduled = (scheduledFor: string): number => {
+    const scheduled = new Date(scheduledFor)
+    const now = new Date()
+    const diffTime = Math.abs(now.getTime() - scheduled.getTime())
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+    return diffDays
+  }
+
+  const handleFollowUp = async (item: any) => {
+    // TODO: Implement follow-up action
+    // This could trigger sending the follow-up email or opening a dialog
+    alert(`Follow-up action for ${item.lead?.name || item.lead?.email} - Follow-up #${item.followup_number}`)
+  }
+
+  const handleRespond = async (item: any) => {
+    setSelectedFollowup(item)
+    setShowRespondDialog(true)
+    setUserChanges('')
+    setIsGeneratingResponse(true)
+    
+    try {
+      // Generate initial response - API will fetch conversation history
+      const result = await generateResponse.mutateAsync({
+        lead_id: item.lead_id,
+        conversation_history: undefined, // Let API fetch it
+        user_changes: null,
+      })
+      
+      setSuggestedResponse({
+        subject: result.subject || 'Re: Your inquiry',
+        content: result.content || '',
+      })
+    } catch (error: any) {
+      alert(error.message || 'Failed to generate response')
+      setShowRespondDialog(false)
+    } finally {
+      setIsGeneratingResponse(false)
+    }
+  }
+
+  const handleRegenerateResponse = async () => {
+    if (!selectedFollowup || !suggestedResponse) return
+    
+    setIsGeneratingResponse(true)
+    try {
+      // Regenerate response with user changes - API will fetch conversation history
+      const result = await generateResponse.mutateAsync({
+        lead_id: selectedFollowup.lead_id,
+        conversation_history: undefined, // Let API fetch it
+        user_changes: userChanges || null,
+      })
+      
+      setSuggestedResponse({
+        subject: result.subject || suggestedResponse.subject,
+        content: result.content || suggestedResponse.content,
+      })
+      // Clear changes after regeneration
+      setUserChanges('')
+    } catch (error: any) {
+      alert(error.message || 'Failed to regenerate response')
+    } finally {
+      setIsGeneratingResponse(false)
+    }
+  }
+
+  const handleSendResponse = async () => {
+    if (!selectedFollowup || !suggestedResponse) return
+    
+    try {
+      await sendEmail.mutateAsync({
+        lead_id: selectedFollowup.lead_id,
+        subject: suggestedResponse.subject,
+        content: suggestedResponse.content,
+      })
+      
+      alert('Response sent successfully!')
+      setShowRespondDialog(false)
+      setSuggestedResponse(null)
+      setUserChanges('')
+    } catch (error: any) {
+      alert(error.message || 'Failed to send response')
+    }
+  }
+
+  const getStatusBadge = (status: FollowupStatus) => {
+    switch (status) {
+      case 'pending':
+        return <Badge className="bg-yellow-500 text-white"><Clock className="h-3 w-3 mr-1" />Pending</Badge>
+      case 'sent':
+        return <Badge className="bg-green-500 text-white"><CheckCircle2 className="h-3 w-3 mr-1" />Sent</Badge>
+      case 'cancelled':
+        return <Badge className="bg-red-500 text-white">Cancelled</Badge>
+      case 'skipped':
+        return <Badge className="bg-gray-500 text-white">Skipped</Badge>
+      default:
+        return <Badge>{status}</Badge>
+    }
+  }
 
   if (leadsLoading) {
     return (
@@ -138,28 +181,28 @@ export default function FollowUpsPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4">
-        <Card className="border-green-200">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">{respondedLeads?.length || 0}</div>
-            <div className="text-sm text-green-600/70">Total Responses</div>
-          </CardContent>
-        </Card>
-        <Card className="border-blue-200">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-blue-600">{activeCount}</div>
-            <div className="text-sm text-blue-600/70">Active Sequences</div>
-          </CardContent>
-        </Card>
         <Card className="border-yellow-200">
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-yellow-600">{pausedCount}</div>
-            <div className="text-sm text-yellow-600/70">Paused</div>
+            <div className="text-2xl font-bold text-yellow-600">{pendingCount}</div>
+            <div className="text-sm text-yellow-600/70">Pending</div>
           </CardContent>
         </Card>
-        <Card className="border-purple-200">
+        <Card className="border-green-200">
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-purple-600">{completedCount}</div>
-            <div className="text-sm text-purple-600/70">Completed</div>
+            <div className="text-2xl font-bold text-green-600">{sentCount}</div>
+            <div className="text-sm text-green-600/70">Sent</div>
+          </CardContent>
+        </Card>
+        <Card className="border-red-200">
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-red-600">{cancelledCount}</div>
+            <div className="text-sm text-red-600/70">Cancelled</div>
+          </CardContent>
+        </Card>
+        <Card className="border-gray-200">
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-gray-600">{skippedCount}</div>
+            <div className="text-sm text-gray-600/70">Skipped</div>
           </CardContent>
         </Card>
       </div>
@@ -186,32 +229,39 @@ export default function FollowUpsPage() {
                 All
               </Button>
               <Button
-                variant={filterStatus === 'active' ? 'default' : 'outline'}
-                onClick={() => setFilterStatus('active')}
-                className={filterStatus === 'active' ? 'bg-[#004565] text-white' : 'border-[#004565]/30 text-[#004565]'}
+                variant={filterStatus === 'pending' ? 'default' : 'outline'}
+                onClick={() => setFilterStatus('pending')}
+                className={filterStatus === 'pending' ? 'bg-[#004565] text-white' : 'border-[#004565]/30 text-[#004565]'}
               >
-                Active
+                Pending
               </Button>
               <Button
-                variant={filterStatus === 'paused' ? 'default' : 'outline'}
-                onClick={() => setFilterStatus('paused')}
-                className={filterStatus === 'paused' ? 'bg-[#004565] text-white' : 'border-[#004565]/30 text-[#004565]'}
+                variant={filterStatus === 'sent' ? 'default' : 'outline'}
+                onClick={() => setFilterStatus('sent')}
+                className={filterStatus === 'sent' ? 'bg-[#004565] text-white' : 'border-[#004565]/30 text-[#004565]'}
               >
-                Paused
+                Sent
               </Button>
               <Button
-                variant={filterStatus === 'completed' ? 'default' : 'outline'}
-                onClick={() => setFilterStatus('completed')}
-                className={filterStatus === 'completed' ? 'bg-[#004565] text-white' : 'border-[#004565]/30 text-[#004565]'}
+                variant={filterStatus === 'cancelled' ? 'default' : 'outline'}
+                onClick={() => setFilterStatus('cancelled')}
+                className={filterStatus === 'cancelled' ? 'bg-[#004565] text-white' : 'border-[#004565]/30 text-[#004565]'}
               >
-                Completed
+                Cancelled
+              </Button>
+              <Button
+                variant={filterStatus === 'skipped' ? 'default' : 'outline'}
+                onClick={() => setFilterStatus('skipped')}
+                className={filterStatus === 'skipped' ? 'bg-[#004565] text-white' : 'border-[#004565]/30 text-[#004565]'}
+              >
+                Skipped
               </Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Responded Leads List */}
+      {/* Follow-up Queue List */}
       <Card className="border-[#004565]/20 shadow-lg">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -220,114 +270,105 @@ export default function FollowUpsPage() {
                 <tr className="border-b bg-[#004565]/5">
                   <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Lead</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Sequence</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Follow-up #</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Days</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Emails</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Last Response</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-[#004565] uppercase">Follow-up</th>
                   <th className="px-6 py-3 text-right text-xs font-semibold text-[#004565] uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredLeads.length === 0 ? (
+                {filteredFollowups.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center">
-                      <MessageSquare className="h-12 w-12 mx-auto text-[#004565]/50 mb-4" />
-                      <p className="text-[#004565] font-medium mb-2">No responses found</p>
+                    <td colSpan={7} className="px-6 py-12 text-center">
+                      <Clock className="h-12 w-12 mx-auto text-[#004565]/50 mb-4" />
+                      <p className="text-[#004565] font-medium mb-2">No follow-ups found</p>
                       <p className="text-sm text-[#004565]/70">
                         {searchTerm || filterStatus !== 'all'
                           ? 'Try adjusting your filters'
-                          : 'Responses will appear here when leads reply to your emails'}
+                          : 'Scheduled follow-ups will appear here'}
                       </p>
                     </td>
                   </tr>
                 ) : (
-                  filteredLeads.map((lead: ResponseLead) => (
-                    <tr key={lead.lead_id} className="border-b hover:bg-[#004565]/5">
-                      <td className="px-6 py-4">
-                        <div>
-                          <div className="font-medium text-[#004565] flex items-center gap-2">
-                            <User className="h-4 w-4" />
-                            {lead.lead_name}
-                          </div>
-                          <div className="text-sm text-[#004565]/70">{lead.lead_email}</div>
-                          {lead.company_name && (
-                            <div className="text-xs text-[#004565]/60 flex items-center gap-1 mt-1">
-                              <Building2 className="h-3 w-3" />
-                              {lead.company_name}
+                  filteredFollowups.map((item) => {
+                    const daysSince = getDaysSinceScheduled(item.scheduled_for)
+                    return (
+                      <tr key={item.id} className="border-b hover:bg-[#004565]/5">
+                        <td className="px-6 py-4">
+                          <div>
+                            <div className="font-medium text-[#004565] flex items-center gap-2">
+                              <User className="h-4 w-4" />
+                              {item.lead?.name || item.lead?.email || 'Unknown'}
                             </div>
+                            <div className="text-sm text-[#004565]/70">{item.lead?.email || '—'}</div>
+                            {item.lead?.company_name && (
+                              <div className="text-xs text-[#004565]/60 flex items-center gap-1 mt-1">
+                                <Building2 className="h-3 w-3" />
+                                {item.lead.company_name}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          {item.sequence?.name ? (
+                            <div>
+                              <div className="font-medium text-[#004565]">{item.sequence.name}</div>
+                              {item.campaign && (
+                                <div className="text-xs text-[#004565]/60">Campaign: {item.campaign.status}</div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-[#004565]/50">No sequence</span>
                           )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        {lead.sequence_name ? (
-                          <div>
-                            <div className="font-medium text-[#004565]">{lead.sequence_name}</div>
-                            <div className="text-xs text-[#004565]/60">Step {lead.current_step + 1}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-medium text-[#004565]">#{item.followup_number}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm font-medium text-[#004565]">
+                            {daysSince === 0 ? 'Today' : `${daysSince} day${daysSince !== 1 ? 's' : ''}`}
                           </div>
-                        ) : (
-                          <span className="text-[#004565]/50">No sequence</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <Badge className={
-                          lead.campaign_status === 'active' ? 'bg-blue-500 text-white' :
-                          lead.campaign_status === 'completed' ? 'bg-purple-500 text-white' :
-                          lead.campaign_status === 'paused' ? 'bg-yellow-500 text-white' :
-                          'bg-gray-500 text-white'
-                        }>
-                          {lead.campaign_status}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-[#004565]">
-                          <div className="flex items-center gap-2">
-                            <Mail className="h-4 w-4" />
-                            {lead.total_emails_sent} sent
+                        </td>
+                        <td className="px-6 py-4">
+                          {getStatusBadge(item.status)}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          {item.responded ? (
+                            <Button
+                              size="sm"
+                              onClick={() => handleRespond(item)}
+                              className="bg-green-500 hover:bg-green-600 text-white"
+                            >
+                              <Reply className="h-4 w-4 mr-1" />
+                              Respond
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              onClick={() => handleFollowUp(item)}
+                              className="bg-[#004565] hover:bg-[#004565]/90 text-white"
+                            >
+                              <Mail className="h-4 w-4 mr-1" />
+                              Follow-up
+                            </Button>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleViewDetails(item)}
+                              className="border-[#004565]/30 text-[#004565]"
+                            >
+                              View
+                            </Button>
                           </div>
-                          <div className="flex items-center gap-2 text-green-600">
-                            <MessageSquare className="h-4 w-4" />
-                            {lead.reply_count} reply{lead.reply_count !== 1 ? 'ies' : ''}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-[#004565]/70">
-                        {lead.last_replied_at ? (
-                          <div>
-                            <div>{new Date(lead.last_replied_at).toLocaleDateString()}</div>
-                            <div className="text-xs">{new Date(lead.last_replied_at).toLocaleTimeString()}</div>
-                          </div>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleViewDetails(lead)}
-                            className="border-[#004565]/30 text-[#004565]"
-                          >
-                            View
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              setSelectedLead(lead)
-                              if (lead.replied_messages.length > 0) {
-                                const lastMessage = lead.replied_messages[lead.replied_messages.length - 1]
-                                setReplySubject(`Re: ${lastMessage.subject || 'Your inquiry'}`)
-                              }
-                              setShowReplyDialog(true)
-                            }}
-                            className="bg-green-500 hover:bg-green-600 text-white"
-                          >
-                            <Reply className="h-4 w-4 mr-1" />
-                            Reply
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                      </tr>
+                    )
+                  })
                 )}
               </tbody>
             </table>
@@ -335,92 +376,98 @@ export default function FollowUpsPage() {
         </CardContent>
       </Card>
 
-      {/* Reply Dialog */}
-      <Dialog open={showReplyDialog} onOpenChange={setShowReplyDialog}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      {/* Respond Dialog */}
+      <Dialog open={showRespondDialog} onOpenChange={setShowRespondDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Reply to {selectedLead?.lead_name}</DialogTitle>
+            <DialogTitle className="text-[#004565]">Respond to {selectedFollowup?.lead?.name || selectedFollowup?.lead?.email}</DialogTitle>
             <DialogDescription>
-              Send a reply and continue the conversation
+              Review and customize the suggested response before sending
             </DialogDescription>
           </DialogHeader>
-          {selectedLead && (
-            <div className="space-y-4">
-              {/* Conversation Thread */}
-              <div className="space-y-3">
-                <h3 className="font-semibold text-[#004565]">Conversation Thread</h3>
-                {selectedLead.replied_messages.length > 0 ? (
-                  selectedLead.replied_messages.map((msg, idx) => (
-                    <Card key={msg.id} className="border-[#004565]/20">
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <div className="font-medium text-[#004565]">Step {msg.sequence_step + 1}</div>
-                            <div className="text-xs text-[#004565]/60">
-                              Sent: {new Date(msg.sent_at).toLocaleString()}
-                            </div>
-                            {msg.replied_at && (
-                              <div className="text-xs text-green-600">
-                                Replied: {new Date(msg.replied_at).toLocaleString()}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-sm font-medium text-[#004565] mb-1">{msg.subject}</div>
-                        <div className="text-sm text-[#004565]/70 whitespace-pre-wrap">{msg.content}</div>
-                      </CardContent>
-                    </Card>
-                  ))
-                ) : (
-                  <p className="text-sm text-[#004565]/70">No messages in thread yet</p>
-                )}
-              </div>
+          
+          {isGeneratingResponse ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-[#004565]" />
+              <span className="ml-3 text-[#004565]">Generating response...</span>
+            </div>
+          ) : suggestedResponse ? (
+            <div className="space-y-6">
+              {/* Suggested Response */}
+              <Card className="border-[#004565]/20">
+                <CardContent className="p-4 space-y-4">
+                  <div>
+                    <Label className="text-[#004565] font-semibold">Subject</Label>
+                    <Input
+                      value={suggestedResponse.subject}
+                      onChange={(e) => setSuggestedResponse({ ...suggestedResponse, subject: e.target.value })}
+                      className="mt-1 border-[#004565]/30"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[#004565] font-semibold">Response Content</Label>
+                    <Textarea
+                      value={suggestedResponse.content}
+                      onChange={(e) => setSuggestedResponse({ ...suggestedResponse, content: e.target.value })}
+                      className="mt-1 min-h-[200px] border-[#004565]/30"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
 
-              {/* Reply Form */}
-              <div className="space-y-4 pt-4 border-t">
-                <div>
-                  <Label htmlFor="reply-subject">Subject</Label>
-                  <Input
-                    id="reply-subject"
-                    placeholder="Re: Your previous subject"
-                    value={replySubject}
-                    onChange={(e) => setReplySubject(e.target.value)}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="reply-content">Message</Label>
-                  <Textarea
-                    id="reply-content"
-                    placeholder="Type your reply..."
-                    rows={8}
-                    value={replyContent}
-                    onChange={(e) => setReplyContent(e.target.value)}
-                    className="mt-1"
-                  />
-                </div>
-                <div className="flex items-center justify-end gap-3">
+              {/* Changes Box */}
+              <Card className="border-blue-200 bg-blue-50">
+                <CardContent className="p-4 space-y-4">
+                  <div>
+                    <Label className="text-[#004565] font-semibold">Suggested Changes (Optional)</Label>
+                    <p className="text-xs text-[#004565]/70 mb-2">
+                      Enter any changes or instructions to modify the response (e.g., "Make it more friendly", "Add pricing information", "Be more direct")
+                    </p>
+                    <Textarea
+                      value={userChanges}
+                      onChange={(e) => setUserChanges(e.target.value)}
+                      placeholder="e.g., Make it more casual and friendly..."
+                      className="mt-1 min-h-[100px] border-blue-300"
+                    />
+                  </div>
                   <Button
+                    onClick={handleRegenerateResponse}
+                    disabled={isGeneratingResponse}
                     variant="outline"
-                    onClick={() => {
-                      setShowReplyDialog(false)
-                      setReplySubject('')
-                      setReplyContent('')
-                    }}
-                    className="border-[#004565]/30 text-[#004565]"
+                    className="w-full border-blue-400 text-blue-700 hover:bg-blue-100"
                   >
-                    Cancel
+                    <RefreshCw className={`h-4 w-4 mr-2 ${isGeneratingResponse ? 'animate-spin' : ''}`} />
+                    Regenerate Response
                   </Button>
-                  <Button
-                    className="bg-green-500 hover:bg-green-600 text-white"
-                    onClick={handleReply}
-                    disabled={!replySubject || !replyContent}
-                  >
-                    <Reply className="h-4 w-4 mr-2" />
-                    Send Reply
-                  </Button>
-                </div>
+                </CardContent>
+              </Card>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#004565]/10">
+                <Button
+                  onClick={() => {
+                    setShowRespondDialog(false)
+                    setSuggestedResponse(null)
+                    setUserChanges('')
+                  }}
+                  variant="outline"
+                  className="border-[#004565]/30 text-[#004565]"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSendResponse}
+                  disabled={sendEmail.isPending}
+                  className="bg-green-500 hover:bg-green-600 text-white"
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  {sendEmail.isPending ? 'Sending...' : 'Send Response'}
+                </Button>
               </div>
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-[#004565]/70">No response generated</p>
             </div>
           )}
         </DialogContent>
@@ -430,12 +477,12 @@ export default function FollowUpsPage() {
       <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Lead Details & Conversation</DialogTitle>
+            <DialogTitle>Follow-up Details</DialogTitle>
             <DialogDescription>
-              Full conversation history and sequence information
+              Detailed information about the scheduled follow-up
             </DialogDescription>
           </DialogHeader>
-          {selectedLead && (
+          {selectedFollowup && (
             <div className="space-y-6">
               {/* Lead Info */}
               <Card className="border-[#004565]/20">
@@ -444,125 +491,90 @@ export default function FollowUpsPage() {
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-[#004565]/70">Name:</span>
-                      <span className="ml-2 font-medium text-[#004565]">{selectedLead.lead_name}</span>
+                      <span className="ml-2 font-medium text-[#004565]">
+                        {selectedFollowup.lead?.name || selectedFollowup.lead?.email || 'Unknown'}
+                      </span>
                     </div>
                     <div>
                       <span className="text-[#004565]/70">Email:</span>
-                      <span className="ml-2 font-medium text-[#004565]">{selectedLead.lead_email}</span>
+                      <span className="ml-2 font-medium text-[#004565]">
+                        {selectedFollowup.lead?.email || '—'}
+                      </span>
                     </div>
-                    {selectedLead.company_name && (
+                    {selectedFollowup.lead?.company_name && (
                       <div>
                         <span className="text-[#004565]/70">Company:</span>
-                        <span className="ml-2 font-medium text-[#004565]">{selectedLead.company_name}</span>
+                        <span className="ml-2 font-medium text-[#004565]">
+                          {selectedFollowup.lead.company_name}
+                        </span>
                       </div>
                     )}
-                    <div>
-                      <span className="text-[#004565]/70">Sequence:</span>
-                      <span className="ml-2 font-medium text-[#004565]">
-                        {selectedLead.sequence_name || 'None'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[#004565]/70">Current Step:</span>
-                      <span className="ml-2 font-medium text-[#004565]">
-                        {selectedLead.current_step + 1}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[#004565]/70">Status:</span>
-                      <Badge className="ml-2 bg-blue-500 text-white">
-                        {selectedLead.campaign_status}
-                      </Badge>
-                    </div>
+                    {selectedFollowup.sequence && (
+                      <div>
+                        <span className="text-[#004565]/70">Sequence:</span>
+                        <span className="ml-2 font-medium text-[#004565]">
+                          {selectedFollowup.sequence.name}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Actions */}
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  className="border-[#004565]/30 text-[#004565]"
-                  onClick={() => {
-                    setShowDetailsDialog(false)
-                    if (selectedLead.replied_messages.length > 0) {
-                      const lastMessage = selectedLead.replied_messages[selectedLead.replied_messages.length - 1]
-                      setReplySubject(`Re: ${lastMessage.subject || 'Your inquiry'}`)
-                    }
-                    setShowReplyDialog(true)
-                  }}
-                >
-                  <Reply className="h-4 w-4 mr-2" />
-                  Reply
-                </Button>
-                {selectedLead.campaign_id && (
-                  <>
-                    {selectedLead.campaign_status === 'active' ? (
-                      <Button
-                        variant="outline"
-                        className="border-yellow-300 text-yellow-600"
-                        onClick={() => selectedLead.campaign_id && handlePauseSequence(selectedLead.campaign_id)}
-                        disabled={pauseSequence.isPending}
-                      >
-                        <Pause className="h-4 w-4 mr-2" />
-                        {pauseSequence.isPending ? 'Pausing...' : 'Pause Sequence'}
-                      </Button>
-                    ) : selectedLead.campaign_status === 'paused' ? (
-                      <Button
-                        variant="outline"
-                        className="border-green-300 text-green-600"
-                        onClick={() => selectedLead.campaign_id && handleResumeSequence(selectedLead.campaign_id)}
-                        disabled={resumeSequence.isPending}
-                      >
-                        <Play className="h-4 w-4 mr-2" />
-                        {resumeSequence.isPending ? 'Resuming...' : 'Resume Sequence'}
-                      </Button>
-                    ) : null}
-                  </>
-                )}
-                <Button
-                  variant="outline"
-                  className="border-purple-300 text-purple-600"
-                >
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Mark as Booked
-                </Button>
-              </div>
-
-              {/* Conversation Timeline */}
-              <div>
-                <h3 className="font-semibold text-[#004565] mb-3">Conversation Timeline</h3>
-                <div className="space-y-3">
-                  {selectedLead.replied_messages.length > 0 ? (
-                    selectedLead.replied_messages.map((msg, idx) => (
-                      <Card key={msg.id} className="border-[#004565]/20">
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between mb-2">
-                            <Badge className="bg-blue-500 text-white">
-                              Step {msg.sequence_step + 1}
-                            </Badge>
-                            <div className="text-xs text-[#004565]/60">
-                              {new Date(msg.sent_at).toLocaleString()}
-                            </div>
-                          </div>
-                          <div className="font-medium text-[#004565] mb-2">{msg.subject}</div>
-                          <div className="text-sm text-[#004565]/70 whitespace-pre-wrap mb-3">{msg.content}</div>
-                          {msg.replied_at && (
-                            <div className="pt-3 border-t border-green-200">
-                              <Badge className="bg-green-500 text-white mb-2">
-                                <MessageSquare className="h-3 w-3 mr-1" />
-                                Replied {new Date(msg.replied_at).toLocaleString()}
-                              </Badge>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))
-                  ) : (
-                    <p className="text-sm text-[#004565]/70">No messages found</p>
-                  )}
-                </div>
-              </div>
+              {/* Follow-up Info */}
+              <Card className="border-[#004565]/20">
+                <CardContent className="p-4">
+                  <h3 className="font-semibold text-[#004565] mb-3">Follow-up Information</h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-[#004565]/70">Follow-up Number:</span>
+                      <span className="ml-2 font-medium text-[#004565]">#{selectedFollowup.followup_number}</span>
+                    </div>
+                    <div>
+                      <span className="text-[#004565]/70">Status:</span>
+                      <span className="ml-2">{getStatusBadge(selectedFollowup.status)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[#004565]/70">Responded:</span>
+                      <span className="ml-2">
+                        {selectedFollowup.responded ? (
+                          <Badge className="bg-green-500 text-white">Yes</Badge>
+                        ) : (
+                          <Badge className="bg-gray-500 text-white">No</Badge>
+                        )}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[#004565]/70">Scheduled For:</span>
+                      <span className="ml-2 font-medium text-[#004565]">
+                        {new Date(selectedFollowup.scheduled_for).toLocaleString()}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[#004565]/70">Days Since Scheduled:</span>
+                      <span className="ml-2 font-medium text-[#004565]">
+                        {getDaysSinceScheduled(selectedFollowup.scheduled_for)} day{getDaysSinceScheduled(selectedFollowup.scheduled_for) !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[#004565]/70">Created At:</span>
+                      <span className="ml-2 font-medium text-[#004565]">
+                        {new Date(selectedFollowup.created_at).toLocaleString()}
+                      </span>
+                    </div>
+                    {selectedFollowup.email_template && (
+                      <div className="col-span-2">
+                        <span className="text-[#004565]/70">Email Template:</span>
+                        <div className="mt-2 p-3 bg-[#004565]/5 rounded border border-[#004565]/20">
+                          <pre className="text-xs text-[#004565]/70 whitespace-pre-wrap">
+                            {selectedFollowup.email_template}
+                          </pre>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           )}
         </DialogContent>

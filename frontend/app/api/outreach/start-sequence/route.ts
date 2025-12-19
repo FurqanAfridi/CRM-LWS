@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createEmailCampaign } from '@/lib/supabase/queries/outreach'
 
 // n8n webhook URL - following existing pattern (hardcoded)
-const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_START_SEQUENCE || 'https://auto.lincolnwaste.co/webhook/start-sequence'
+const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_START_SEQUENCE || 'http://auto.lincolnwaste.co/webhook/startsequence'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,25 +19,27 @@ export async function POST(request: NextRequest) {
     // Call n8n webhook to start sequence
     let n8nData
     try {
-    const n8nResponse = await fetch(N8N_WEBHOOK_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        lead_id,
-        sequence_id,
-          sequence_template_id: sequence_template_id || null,
-      }),
-    })
+      // Build URL with query parameters for GET request
+      const url = new URL(N8N_WEBHOOK_URL)
+      url.searchParams.append('lead_id', lead_id)
+      url.searchParams.append('sequence_id', sequence_id)
+      
+      console.log('Calling n8n webhook (GET):', url.toString())
+      console.log('Webhook payload (query params):', { lead_id, sequence_id })
+      
+      const n8nResponse = await fetch(url.toString(), {
+        method: 'GET',
+      })
+      
+      console.log('Webhook response status:', n8nResponse.status)
 
       n8nData = await n8nResponse.json().catch(() => ({}))
 
-    if (!n8nResponse.ok) {
-      return NextResponse.json(
-        { error: n8nData?.error || n8nData?.message || 'Failed to start sequence' },
-        { status: n8nResponse.status }
-      )
+      if (!n8nResponse.ok) {
+        return NextResponse.json(
+          { error: n8nData?.error || n8nData?.message || 'Failed to start sequence' },
+          { status: n8nResponse.status }
+        )
       }
     } catch (webhookError: any) {
       console.error('Error calling n8n webhook:', webhookError)

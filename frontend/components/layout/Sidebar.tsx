@@ -9,8 +9,6 @@ import {
   Building2,
   Users,
   Target,
-  BarChart3,
-  MessageSquare,
   TrendingUp,
   Mail,
   Reply,
@@ -24,8 +22,6 @@ const navigation = [
   { name: 'Companies', href: '/dashboard/companies', icon: Building2 },
   { name: 'Contacts', href: '/dashboard/contacts', icon: Users },
   { name: 'Pipeline', href: '/dashboard/pipeline', icon: TrendingUp },
-  { name: 'Interactions', href: '/dashboard/interactions', icon: MessageSquare },
-  { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
 ]
 
 export function Sidebar() {

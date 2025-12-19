@@ -36,11 +36,16 @@ Create a file named `.env.local` in the `frontend` directory with the following 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your-actual-key-here
+
+# Calendly Configuration (Permanent)
+NEXT_PUBLIC_CALENDLY_URL=https://calendly.com/11626-ourresource/30min
 ```
 
 **Replace:**
 - `https://your-project-id.supabase.co` with your actual Project URL
 - `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` with your actual anon public key
+
+**Note:** The Calendly URL is permanently configured. You can change it if needed by updating `NEXT_PUBLIC_CALENDLY_URL`.
 
 ### Step 4: Restart Dev Server
 
@@ -95,7 +100,10 @@ frontend/
 # Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=https://abcdefghijklmnop.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiY2RlZmdoaWprbG1ub3AiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYxNjIzOTAyMiwiZXhwIjoxOTMxODE1MDIyfQ.abcdefghijklmnopqrstuvwxyz1234567890
+
+# Calendly Configuration (Permanent)
+NEXT_PUBLIC_CALENDLY_URL=https://calendly.com/11626-ourresource/30min
 ```
 
-**Note:** The example above uses placeholder values. Use your actual credentials from Supabase dashboard.
+**Note:** The example above uses placeholder values. Use your actual credentials from Supabase dashboard. The Calendly URL is set to the permanent schedule.
 

@@ -22,6 +22,7 @@ import {
   updateEmailSequence,
   getRespondedLeads,
   getLeadConversation,
+  getFollowupQueue,
   type CampaignFilters,
   type MetricsFilters,
   type BookingFilters,
@@ -155,6 +156,15 @@ export function useLeadConversation(leadId: string) {
     queryKey: ['lead-conversation', leadId],
     queryFn: () => getLeadConversation(leadId),
     enabled: !!leadId,
+  })
+}
+
+export function useFollowupQueue(filters?: { status?: string }) {
+  return useQuery({
+    queryKey: ['followup-queue', filters],
+    queryFn: () => getFollowupQueue(filters),
+    staleTime: 30000,
+    refetchInterval: 60000, // Refetch every minute
   })
 }
 
@@ -397,6 +407,34 @@ export function useSendManualEmail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['lead-messages'] })
+      queryClient.invalidateQueries({ queryKey: ['followup-queue'] })
+    },
+  })
+}
+
+export function useGenerateResponse() {
+  return useMutation({
+    mutationFn: async ({ 
+      lead_id, 
+      conversation_history, 
+      user_changes 
+    }: { 
+      lead_id: string; 
+      conversation_history?: any[]; 
+      user_changes?: string 
+    }) => {
+      const response = await fetch('/api/outreach/generate-response', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lead_id, conversation_history, user_changes }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to generate response')
+      }
+
+      return response.json()
     },
   })
 }
@@ -640,7 +678,13 @@ export function useWarmupOverride() {
 export function useDNSCheck() {
   return useMutation({
     mutationFn: async (domain: string) => {
-      const response = await fetch(`/api/outreach/domain-settings/dns-check?domain=${domain}`)
+      const response = await fetch('/api/outreach/domain-settings/dns-check', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ domain }),
+      })
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || 'Failed to check DNS')
@@ -729,7 +773,7 @@ export function useConnectCalendar() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (provider: 'calendly' | 'google' | 'outlook') => {
+    mutationFn: async (provider: 'calendly') => {
       const response = await fetch('/api/outreach/calendar/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -753,7 +797,7 @@ export function useDisconnectCalendar() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (provider: 'calendly' | 'google' | 'outlook') => {
+    mutationFn: async (provider: 'calendly') => {
       const response = await fetch(`/api/outreach/calendar/disconnect?provider=${provider}`, {
         method: 'DELETE',
       })

@@ -4,40 +4,33 @@ import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { DomainWarmupCard } from '@/components/outreach/DomainWarmupCard'
-import { MetricsCards } from '@/components/outreach/MetricsCards'
-import { PipelineFunnel } from '@/components/outreach/PipelineFunnel'
-import { SequenceKanban } from '@/components/outreach/SequenceKanban'
-import { CalendarBookingCard } from '@/components/outreach/CalendarBookingCard'
+import { CalendarIntegration } from '@/components/outreach/CalendarIntegration'
+import { AIResponderConfig } from '@/components/outreach/AIResponderConfig'
+import { useEmailSequences } from '@/lib/hooks/useOutreach'
+import { RefreshCw, Settings, Mail, Plus, Calendar, Edit, Trash2, Sparkles, Eye, Bot } from 'lucide-react'
+import { SequenceBuilder } from '@/components/outreach/SequenceBuilder'
+import { useSequenceBuilder } from '@/lib/hooks/useOutreach'
 import { AIPersonalizationConfig } from '@/components/outreach/AIPersonalizationConfig'
 import { SequencePreview } from '@/components/outreach/SequencePreview'
-import { DomainWarmupConfig } from '@/components/outreach/DomainWarmupConfig'
-import { CalendarIntegration } from '@/components/outreach/CalendarIntegration'
-import { useCalendarStatus, useOutreachMetrics } from '@/lib/hooks/useOutreach'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { RefreshCw, Play, Pause, Settings, Mail, Sparkles, Eye, Plus, Calendar, TrendingUp, Shield } from 'lucide-react'
-import Link from 'next/link'
 
 export default function PipelinePage() {
-  const [activeTab, setActiveTab] = useState<'kanban' | 'timeline' | 'metrics'>('kanban')
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [showAIPersonalization, setShowAIPersonalization] = useState(false)
-  const [showSequencePreview, setShowSequencePreview] = useState(false)
-  const [showDomainConfig, setShowDomainConfig] = useState(false)
-  const [showBookingConfig, setShowBookingConfig] = useState(false)
+  const [showSequenceBuilder, setShowSequenceBuilder] = useState(false)
+  const [editingSequenceId, setEditingSequenceId] = useState<string | null>(null)
   const [selectedSequenceId, setSelectedSequenceId] = useState<string | null>(null)
   const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(null)
+  const [showPersonalization, setShowPersonalization] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
 
-  const { data: calendarStatus } = useCalendarStatus()
-  const { data: metrics } = useOutreachMetrics()
+  const { data: sequences, isLoading: sequencesLoading } = useEmailSequences()
+  const builder = useSequenceBuilder()
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
     // Trigger a window refresh to refetch all queries
     window.location.reload()
   }
-
-  const connectedCalendars = calendarStatus ? Object.values(calendarStatus).filter((c: any) => c?.is_active).length : 0
 
   return (
     <div className="space-y-6">
@@ -49,15 +42,16 @@ export default function PipelinePage() {
           <div className="absolute -top-2 -left-2 w-24 h-24 bg-[#376EE1]/20 rounded-full blur-2xl -z-10"></div>
         </div>
         <div className="flex gap-3">
-          <Link href="/dashboard/pipeline/sequences">
-            <Button
-              variant="outline"
-              className="border-[#004565]/30 text-[#004565] hover:bg-[#004565]/10 hover:border-[#004565]/50 transition-all duration-300"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Create Sequence
-            </Button>
-          </Link>
+          <Button
+            onClick={() => {
+              setEditingSequenceId(null)
+              setShowSequenceBuilder(true)
+            }}
+            className="bg-[#004565] hover:bg-[#004565]/90 text-white"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Create Sequence
+          </Button>
           <Button
             onClick={handleRefresh}
             disabled={isRefreshing}
@@ -86,358 +80,204 @@ export default function PipelinePage() {
         </div>
       </div>
 
-      {/* Top Metrics Row */}
-      <MetricsCards />
-
-      {/* AI Personalization Settings Section */}
-      <Card className="border-[#004565]/20 shadow-lg bg-white/90 backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between text-[#004565]">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5" />
-              AI Personalization Settings
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowSequencePreview(true)}
-                className="border-[#004565]/30 text-[#004565] hover:bg-[#004565]/10"
-              >
-                <Eye className="h-4 w-4 mr-1" />
-                Preview Email
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowAIPersonalization(true)}
-                className="border-[#004565]/30 text-[#004565] hover:bg-[#004565]/10"
-              >
-                Configure
-              </Button>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-[#004565]/70">
-            Configure AI-powered email personalization for your outreach sequences. Enable personalized messaging to improve engagement rates.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Booking Workflow Configuration */}
-      <Card className="border-[#004565]/20 shadow-lg bg-white/90 backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between text-[#004565]">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Booking Workflow
-            </div>
-            <div className="flex items-center gap-2">
-              {connectedCalendars > 0 && (
-                <Badge variant="success" className="text-xs">
-                  {connectedCalendars} calendar{connectedCalendars !== 1 ? 's' : ''} connected
-                </Badge>
-              )}
-              <Link href="/dashboard/pipeline/booking-settings">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-[#004565]/30 text-[#004565] hover:bg-[#004565]/10"
-                >
-                  Configure
-                </Button>
-              </Link>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-[#004565]/70 mb-3">
-            Manage calendar integrations and email routing for booking confirmations.
-          </p>
-          <div className="flex gap-2">
-            <Link href="/dashboard/pipeline/booking-settings">
-              <Button variant="outline" size="sm" className="border-[#004565]/30 text-[#004565] hover:bg-[#004565]/10">
-                Calendar Settings
-              </Button>
-            </Link>
-            <Link href="/dashboard/pipeline/booking-settings">
-              <Button variant="outline" size="sm" className="border-[#004565]/30 text-[#004565] hover:bg-[#004565]/10">
-                Email Routing
-              </Button>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Domain Warm-Up Section */}
-      <Card className="border-[#004565]/20 shadow-lg bg-white/90 backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between text-[#004565]">
-            <div className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              Domain Warm-Up
-            </div>
-            <Link href="/dashboard/pipeline/domain-settings">
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-[#004565]/30 text-[#004565] hover:bg-[#004565]/10"
-              >
-                Configure
-              </Button>
-            </Link>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DomainWarmupCard />
-        </CardContent>
-      </Card>
-
-      {/* Pipeline Funnel */}
-      <PipelineFunnel />
-
-      {/* Main Content Area with Tabs */}
-      <Card className="border-[#004565]/20 shadow-lg bg-white/90 backdrop-blur-sm">
-        <CardContent className="p-0">
-          {/* Tabs */}
-          <div className="border-b border-[#004565]/10">
-            <div className="flex">
-              <button
-                onClick={() => setActiveTab('kanban')}
-                className={`px-6 py-3 text-sm font-medium transition-colors ${
-                  activeTab === 'kanban'
-                    ? 'text-[#004565] border-b-2 border-[#004565]'
-                    : 'text-[#004565]/70 hover:text-[#004565]'
-                }`}
-              >
-                Kanban View
-              </button>
-              <button
-                onClick={() => setActiveTab('timeline')}
-                className={`px-6 py-3 text-sm font-medium transition-colors ${
-                  activeTab === 'timeline'
-                    ? 'text-[#004565] border-b-2 border-[#004565]'
-                    : 'text-[#004565]/70 hover:text-[#004565]'
-                }`}
-              >
-                Timeline View
-              </button>
-              <button
-                onClick={() => setActiveTab('metrics')}
-                className={`px-6 py-3 text-sm font-medium transition-colors ${
-                  activeTab === 'metrics'
-                    ? 'text-[#004565] border-b-2 border-[#004565]'
-                    : 'text-[#004565]/70 hover:text-[#004565]'
-                }`}
-              >
-                Metrics
-              </button>
-            </div>
-          </div>
-
-          {/* Tab Content */}
-          <div className="p-6">
-            {activeTab === 'kanban' && (
-              <div>
-                <SequenceKanban />
+      {/* Sequences Section */}
+      {showSequenceBuilder ? (
+        <SequenceBuilder
+          sequenceId={editingSequenceId || undefined}
+          onSave={() => {
+            setShowSequenceBuilder(false)
+            setEditingSequenceId(null)
+          }}
+          onCancel={() => {
+            setShowSequenceBuilder(false)
+            setEditingSequenceId(null)
+          }}
+        />
+      ) : (
+        <Card className="border-[#004565]/20 shadow-lg bg-white/90 backdrop-blur-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between text-[#004565]">
+              <div className="flex items-center gap-2">
+                <Mail className="h-5 w-5" />
+                Email Sequences
               </div>
-            )}
-
-            {activeTab === 'timeline' && (
+              <Button
+                onClick={() => {
+                  setEditingSequenceId(null)
+                  setShowSequenceBuilder(true)
+                }}
+                size="sm"
+                className="bg-[#004565] hover:bg-[#004565]/90 text-white"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Create Sequence
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {sequencesLoading ? (
+              <div className="text-center py-12">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#004565]/20 border-t-[#004565] mx-auto"></div>
+              </div>
+            ) : sequences && sequences.length > 0 ? (
               <div className="space-y-4">
-                <div className="text-center py-12">
-                  <Mail className="h-12 w-12 mx-auto text-[#004565]/50 mb-4" />
-                  <p className="text-[#004565]/70">Timeline view - Click on a campaign in Kanban view to see its timeline</p>
-                </div>
+                {sequences.map((sequence) => {
+                  const steps = (sequence.steps as any[]) || []
+                  return (
+                    <Card key={sequence.id} className="border-[#004565]/10 bg-white">
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h3 className="text-lg font-semibold text-[#004565]">{sequence.name}</h3>
+                              <Badge variant={sequence.is_active ? 'default' : 'outline'}>
+                                {sequence.is_active ? 'Active' : 'Inactive'}
+                              </Badge>
+                            </div>
+                            {sequence.description && (
+                              <p className="text-sm text-[#004565]/70 mb-3">{sequence.description}</p>
+                            )}
+                            <div className="flex items-center gap-4 text-sm text-[#004565]/70">
+                              <span className="flex items-center gap-1">
+                                <Mail className="h-4 w-4" />
+                                {steps.length} step{steps.length !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                            {steps.length > 0 && (
+                              <div className="mt-3 space-y-2">
+                                {steps.map((step, index) => (
+                                  <div key={index} className="flex items-center justify-between p-2 bg-[#004565]/5 rounded border border-[#004565]/10">
+                                    <div className="text-xs text-[#004565]/70">
+                                      Step {index + 1}: {step.name || `Step ${index + 1}`} ({step.days_after || 0} days)
+                                    </div>
+                                    <div className="flex gap-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                          setSelectedSequenceId(sequence.id)
+                                          setSelectedStepIndex(index)
+                                          setShowPersonalization(true)
+                                        }}
+                                        className="h-6 px-2 text-[#004565] hover:bg-[#004565]/10"
+                                      >
+                                        <Sparkles className="h-3 w-3 mr-1" />
+                                        <span className="text-xs">AI Config</span>
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                          setSelectedSequenceId(sequence.id)
+                                          setSelectedStepIndex(index)
+                                          setShowPreview(true)
+                                        }}
+                                        className="h-6 px-2 text-[#004565] hover:bg-[#004565]/10"
+                                      >
+                                        <Eye className="h-3 w-3 mr-1" />
+                                        <span className="text-xs">Preview</span>
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditingSequenceId(sequence.id)
+                                setShowSequenceBuilder(true)
+                              }}
+                              className="border-[#004565]/30 text-[#004565] hover:bg-[#004565]/10"
+                            >
+                              <Edit className="h-4 w-4 mr-1" />
+                              Edit
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                if (!confirm('Are you sure you want to delete this sequence?')) return
+                                try {
+                                  await builder.delete.mutateAsync(sequence.id)
+                                } catch (error: any) {
+                                  alert(error.message || 'Failed to delete sequence')
+                                }
+                              }}
+                              className="border-red-300 text-red-600 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <Mail className="h-12 w-12 mx-auto text-[#004565]/50 mb-4" />
+                <p className="text-[#004565] font-medium mb-2">No sequences found</p>
+                <p className="text-sm text-[#004565]/70 mb-4">Create your first email sequence to get started</p>
+                <Button
+                  onClick={() => {
+                    setEditingSequenceId(null)
+                    setShowSequenceBuilder(true)
+                  }}
+                  className="bg-[#004565] hover:bg-[#004565]/90 text-white"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Sequence
+                </Button>
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
 
-            {activeTab === 'metrics' && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <CalendarBookingCard />
-                  <Card className="border-[#004565]/20 shadow-lg bg-white/90 backdrop-blur-sm">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-[#004565]">
-                        <TrendingUp className="h-5 w-5" />
-                        AI Personalization Effectiveness
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div>
-                          <div className="text-sm text-[#004565]/70 mb-1">Personalization Rate</div>
-                          <div className="text-2xl font-bold text-[#004565]">
-                            {metrics ? '85%' : '--'}%
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-[#004565]/70 mb-1">Avg. Response Rate</div>
-                          <div className="text-2xl font-bold text-[#00CD50]">
-                            {metrics ? `${metrics.reply_rate.toFixed(1)}%` : '--'}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-[#004565]/70 mb-1">Engagement Score</div>
-                          <div className="text-2xl font-bold text-[#376EE1]">
-                            {metrics ? `${metrics.open_rate.toFixed(1)}%` : '--'}
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+      {/* AI Responder Configuration */}
+      <AIResponderConfig />
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <Card className="border-[#004565]/20 shadow-lg bg-white/90 backdrop-blur-sm">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-[#004565]">
-                        <Calendar className="h-5 w-5" />
-                        Booking Conversion Rates
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div>
-                          <div className="text-sm text-[#004565]/70 mb-1">Booking Link Clicks</div>
-                          <div className="text-2xl font-bold text-[#004565]">--</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-[#004565]/70 mb-1">Confirmed Bookings</div>
-                          <div className="text-2xl font-bold text-[#00CD50]">--</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-[#004565]/70 mb-1">Conversion Rate</div>
-                          <div className="text-2xl font-bold text-[#376EE1]">--%</div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+      {/* Calendly Schedule */}
+      <CalendarIntegration />
 
-                  <Card className="border-[#004565]/20 shadow-lg bg-white/90 backdrop-blur-sm">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-[#004565]">
-                        <Shield className="h-5 w-5" />
-                        Domain Reputation Trends
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div>
-                          <div className="text-sm text-[#004565]/70 mb-1">Current Reputation</div>
-                          <div className="text-2xl font-bold text-[#004565]">--/100</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-[#004565]/70 mb-1">Trend (7 days)</div>
-                          <div className="text-2xl font-bold text-[#00CD50]">↑ +5</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-[#004565]/70 mb-1">Deliverability Score</div>
-                          <div className="text-2xl font-bold text-[#376EE1]">
-                            {metrics ? `${metrics.deliverability_score.toFixed(1)}%` : '--'}
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <Card className="border-[#004565]/20 shadow-lg bg-white/90 backdrop-blur-sm">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-[#004565]">
-                      <Shield className="h-5 w-5" />
-                      Deliverability Health Dashboard
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div>
-                        <div className="text-sm text-[#004565]/70 mb-1">Bounce Rate</div>
-                        <div className="text-xl font-bold text-[#004565]">
-                          {metrics ? `${metrics.bounce_rate.toFixed(2)}%` : '--'}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-sm text-[#004565]/70 mb-1">Open Rate</div>
-                        <div className="text-xl font-bold text-[#00CD50]">
-                          {metrics ? `${metrics.open_rate.toFixed(2)}%` : '--'}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-sm text-[#004565]/70 mb-1">Reply Rate</div>
-                        <div className="text-xl font-bold text-[#376EE1]">
-                          {metrics ? `${metrics.reply_rate.toFixed(2)}%` : '--'}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-sm text-[#004565]/70 mb-1">Total Sent</div>
-                        <div className="text-xl font-bold text-[#004565]">
-                          {metrics ? metrics.total_sent.toLocaleString() : '--'}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Modals */}
-      <Dialog open={showAIPersonalization} onOpenChange={setShowAIPersonalization}>
+      {/* AI Personalization Configuration Dialog */}
+      <Dialog open={showPersonalization} onOpenChange={setShowPersonalization}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-[#004565]">AI Personalization Configuration</DialogTitle>
           </DialogHeader>
-          {selectedSequenceId && selectedStepIndex !== null ? (
+          {selectedSequenceId && selectedStepIndex !== null && (
             <AIPersonalizationConfig
               sequenceId={selectedSequenceId}
               stepIndex={selectedStepIndex}
-              onSave={() => setShowAIPersonalization(false)}
-              onClose={() => setShowAIPersonalization(false)}
+              onSave={() => setShowPersonalization(false)}
+              onClose={() => setShowPersonalization(false)}
             />
-          ) : (
-            <div className="p-4">
-              <p className="text-sm text-[#004565]/70 mb-4">
-                Please select a sequence and step to configure personalization.
-              </p>
-              <Link href="/dashboard/pipeline/sequences">
-                <Button className="bg-[#004565] hover:bg-[#004565]/90 text-white">
-                  Go to Sequences
-                </Button>
-              </Link>
-            </div>
           )}
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showSequencePreview} onOpenChange={setShowSequencePreview}>
+      {/* Sequence Preview Dialog */}
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-[#004565]">Email Preview</DialogTitle>
           </DialogHeader>
-          {selectedSequenceId && selectedStepIndex !== null ? (
+          {selectedSequenceId && selectedStepIndex !== null && (
             <SequencePreview
               sequenceId={selectedSequenceId}
               stepIndex={selectedStepIndex}
-              onClose={() => setShowSequencePreview(false)}
+              onClose={() => setShowPreview(false)}
             />
-          ) : (
-            <div className="p-4">
-              <p className="text-sm text-[#004565]/70 mb-4">
-                Please select a sequence and step to preview.
-              </p>
-              <Link href="/dashboard/pipeline/sequences">
-                <Button className="bg-[#004565] hover:bg-[#004565]/90 text-white">
-                  Go to Sequences
-                </Button>
-              </Link>
-            </div>
           )}
         </DialogContent>
       </Dialog>
+
     </div>
   )
 }

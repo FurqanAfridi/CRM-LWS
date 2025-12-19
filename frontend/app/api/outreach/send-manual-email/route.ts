@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createEmailMessage } from '@/lib/supabase/queries/outreach'
 
 // n8n webhook URL - following existing pattern (hardcoded)
-const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_SEND_MANUAL || 'https://auto.lincolnwaste.co/webhook/[id]'
+const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_SEND_MANUAL || 'http://auto.lincolnwaste.co/webhook/sendmails'
 
 export async function POST(request: NextRequest) {
   try {

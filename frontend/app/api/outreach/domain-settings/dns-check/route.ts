@@ -1,31 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 // n8n webhook URL for DNS check
-const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_DNS_CHECK || 'https://auto.lincolnwaste.co/webhook/[id]'
+const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_DNS_CHECK || 'http://auto.lincolnwaste.co/webhook/DNSResolve'
 
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const domain = searchParams.get('domain')
+    const body = await request.json()
+    const { domain } = body
 
     if (!domain) {
       return NextResponse.json(
-        { error: 'domain query parameter is required' },
+        { error: 'domain is required in request body' },
         { status: 400 }
       )
     }
 
     // Call n8n webhook for DNS validation
+    const webhookPayload = { domain }
     const dnsResponse = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ domain }),
+      headers: { 
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(webhookPayload),
     })
 
     if (!dnsResponse.ok) {
-      const errorData = await dnsResponse.json()
+      let errorData: any = {}
+      try {
+        errorData = await dnsResponse.json()
+      } catch (e) {
+        const text = await dnsResponse.text()
+        errorData = { error: text || 'Failed to check DNS records' }
+      }
       return NextResponse.json(
-        { error: errorData?.error || 'Failed to check DNS records' },
+        { error: errorData?.error || errorData?.message || 'Failed to check DNS records' },
         { status: dnsResponse.status }
       )
     }

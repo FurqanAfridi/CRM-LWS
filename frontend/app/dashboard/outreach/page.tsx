@@ -23,17 +23,16 @@ export default function OutreachPage() {
 
   // Group leads by outreach status
   const getLeadStatus = (lead: any): OutreachStatus => {
-    const campaign = campaigns?.find((c: any) => c.lead_id === lead.id && (c.status === 'active' || c.status === 'pending'))
-    
+    // After outreach starts, leads go to followup_queue, so we don't show "sent" status here
     if (lead.outreach_status === 'booked') return 'booked'
     if (lead.outreach_status === 'responded') return 'responded'
-    if (campaign || lead.outreach_status === 'in_sequence') return 'sent'
+    // If there's a campaign, it means outreach has started, but we don't show it here
+    // It will be shown in the follow-ups page instead
     return 'not_started'
   }
 
   const leadsByStatus = {
     not_started: leads?.filter(l => l.email && getLeadStatus(l) === 'not_started') || [],
-    sent: leads?.filter(l => l.email && getLeadStatus(l) === 'sent') || [],
     responded: leads?.filter(l => l.email && getLeadStatus(l) === 'responded') || [],
     booked: leads?.filter(l => l.email && getLeadStatus(l) === 'booked') || [],
   }
@@ -84,8 +83,20 @@ export default function OutreachPage() {
   }
 
   const filteredLeads = useMemo(() => {
-    return leads?.filter(l => l.email) || []
-  }, [leads])
+    // Only show leads that are not_started, responded, or booked
+    // Leads with "sent" status will be shown in the follow-ups page instead
+    if (!leads) return []
+    return leads.filter(l => {
+      if (!l.email) return false
+      // Check status directly without using getLeadStatus to avoid dependency issues
+      if (l.outreach_status === 'booked') return true
+      if (l.outreach_status === 'responded') return true
+      // If there's an active campaign, it means outreach started - don't show here
+      const campaign = campaigns?.find((c: any) => c.lead_id === l.id && (c.status === 'active' || c.status === 'pending'))
+      if (campaign || l.outreach_status === 'in_sequence') return false
+      return true // not_started
+    })
+  }, [leads, campaigns])
 
   const sortedLeads = useMemo(() => {
     if (!filteredLeads || !sortConfig) return filteredLeads
@@ -191,12 +202,6 @@ export default function OutreachPage() {
                 <CardContent className="p-3">
                   <div className="text-xl font-bold text-[#004565]">{leadsByStatus.not_started.length}</div>
                   <div className="text-xs text-[#004565]/70">Not Started</div>
-                </CardContent>
-              </Card>
-              <Card className="border-blue-200">
-                <CardContent className="p-3">
-                  <div className="text-xl font-bold text-blue-600">{leadsByStatus.sent.length}</div>
-                  <div className="text-xs text-blue-600/70">Waiting</div>
                 </CardContent>
               </Card>
               <Card className="border-green-200">
@@ -385,17 +390,6 @@ export default function OutreachPage() {
                             >
                               <Send className="h-4 w-4 mr-1" />
                               Start Outreach
-                            </Button>
-                          )}
-                          {status === 'sent' && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="border-[#004565]/30 text-[#004565]"
-                              disabled
-                            >
-                              <Clock className="h-4 w-4 mr-1" />
-                              Waiting...
                             </Button>
                           )}
                           {status === 'responded' && (

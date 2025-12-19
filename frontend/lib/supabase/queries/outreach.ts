@@ -365,6 +365,109 @@ export async function getLeadConversation(leadId: string) {
 }
 
 // ============================================================================
+// FOLLOWUP QUEUE QUERIES
+// ============================================================================
+
+export interface FollowupQueueItem {
+  id: string
+  lead_id: string
+  campaign_id: string | null
+  scheduled_for: string
+  followup_number: number
+  status: 'pending' | 'sent' | 'cancelled' | 'skipped'
+  email_template: string | null
+  created_at: string
+  updated_at: string
+  responded: boolean
+  lead?: {
+    id: string
+    name: string | null
+    email: string | null
+    company_name: string | null
+  }
+  campaign?: {
+    id: string
+    sequence_id: string | null
+    status: string
+  } | null
+  sequence?: {
+    id: string
+    name: string
+  } | null
+}
+
+export async function getFollowupQueue(filters?: { status?: string }) {
+  let query = supabase
+    .from('followup_queue')
+    .select(`
+      *,
+      leads:lead_id (
+        id,
+        name,
+        email,
+        company_name
+      ),
+      email_campaigns:campaign_id (
+        id,
+        sequence_id,
+        status,
+        email_sequences:sequence_id (
+          id,
+          name
+        )
+      )
+    `)
+    .order('scheduled_for', { ascending: true })
+
+  if (filters?.status) {
+    query = query.eq('status', filters.status)
+  }
+
+  const { data, error } = await query
+
+  if (error) throw error
+
+  // Transform the data to a cleaner structure
+  const transformed = (data || []).map((item: any) => {
+    const lead = Array.isArray(item.leads) ? item.leads[0] : item.leads
+    const campaign = Array.isArray(item.email_campaigns) ? item.email_campaigns[0] : item.email_campaigns
+    const sequence = campaign?.email_sequences 
+      ? (Array.isArray(campaign.email_sequences) ? campaign.email_sequences[0] : campaign.email_sequences)
+      : null
+
+    return {
+      id: item.id,
+      lead_id: item.lead_id,
+      campaign_id: item.campaign_id,
+      scheduled_for: item.scheduled_for,
+      followup_number: item.followup_number,
+      status: item.status,
+      email_template: item.email_template,
+      created_at: item.created_at,
+      updated_at: item.updated_at,
+      responded: item.responded || false,
+      lead: lead ? {
+        id: lead.id,
+        name: lead.name,
+        email: lead.email,
+        company_name: lead.company_name,
+      } : undefined,
+      campaign: campaign ? {
+        id: campaign.id,
+        sequence_id: campaign.sequence_id,
+        status: campaign.status,
+      } : null,
+      sequence: sequence ? {
+        id: sequence.id,
+        name: sequence.name,
+      } : null,
+    }
+  })
+
+  return transformed as FollowupQueueItem[]
+}
+
+// ============================================================================
 // OUTREACH METRICS QUERIES
 // ============================================================================
 
