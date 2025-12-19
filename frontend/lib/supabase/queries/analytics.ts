@@ -21,30 +21,28 @@ export interface ConversionFunnel {
 }
 
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {
-  const [leadsResult, companiesResult] = await Promise.all([
-    supabase.from('leads').select('id, qualification_status, estimated_value, status'),
-    supabase.from('companies').select('id'),
+  // Use count queries instead of fetching all records for better performance
+  const [leadsResult, companiesResult, qualifiedLeadsResult, closedWonResult, pipelineValueResult] = await Promise.all([
+    supabase.from('leads').select('id', { count: 'exact', head: true }),
+    supabase.from('companies').select('id', { count: 'exact', head: true }),
+    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('qualification_status', 'qualified'),
+    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('status', 'closed_won'),
+    supabase.from('leads').select('estimated_value').not('estimated_value', 'is', null),
   ])
 
   if (leadsResult.error) throw leadsResult.error
   if (companiesResult.error) throw companiesResult.error
+  if (qualifiedLeadsResult.error) throw qualifiedLeadsResult.error
+  if (closedWonResult.error) throw closedWonResult.error
+  if (pipelineValueResult.error) throw pipelineValueResult.error
 
-  const leads = (leadsResult.data || []) as Array<{
-    id: string
-    qualification_status: string
-    estimated_value: number | null
-    status: string
-  }>
-  const companies = companiesResult.data || []
-
-  const totalLeads = leads.length
-  const qualifiedLeads = leads.filter((l) => l.qualification_status === 'qualified').length
-  const totalCompanies = companies.length
-  const pipelineValue = leads.reduce((sum, lead) => {
+  const totalLeads = leadsResult.count || 0
+  const qualifiedLeads = qualifiedLeadsResult.count || 0
+  const totalCompanies = companiesResult.count || 0
+  const closedWon = closedWonResult.count || 0
+  const pipelineValue = (pipelineValueResult.data || []).reduce((sum: number, lead: any) => {
     return sum + (Number(lead.estimated_value) || 0)
   }, 0)
-
-  const closedWon = leads.filter((l) => l.status === 'closed_won').length
   const conversionRate = totalLeads > 0 ? (closedWon / totalLeads) * 100 : 0
 
   return {
@@ -60,6 +58,7 @@ export async function getObjectionFrequency(): Promise<ObjectionFrequency[]> {
   const { data, error } = await supabase
     .from('leads')
     .select('objections')
+    .limit(1000) // Limit to prevent loading too much data
 
   if (error) throw error
 
@@ -86,30 +85,28 @@ export async function getObjectionFrequency(): Promise<ObjectionFrequency[]> {
 }
 
 export async function getConversionFunnel(): Promise<ConversionFunnel[]> {
-  const { data, error } = await supabase
-    .from('leads')
-    .select('status')
-
-  if (error) throw error
-
-  const statusCounts = new Map<string, number>()
-  const leads = (data || []) as Array<{ status: string }>
-  const total = leads.length
-
-  leads.forEach((lead) => {
-    statusCounts.set(lead.status, (statusCounts.get(lead.status) || 0) + 1)
-  })
-
+  // Use count queries for each status instead of fetching all records
   const stages = ['new', 'qualified', 'contract_review', 'proposal', 'closed_won', 'closed_lost']
+  
+  const statusCounts = await Promise.all(
+    stages.map(async (stage) => {
+      const { count, error } = await supabase
+        .from('leads')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', stage)
+      
+      if (error) throw error
+      return { stage, count: count || 0 }
+    })
+  )
 
-  return stages.map((stage) => {
-    const count = statusCounts.get(stage) || 0
-    return {
-      stage,
-      count,
-      percentage: total > 0 ? (count / total) * 100 : 0,
-    }
-  })
+  const total = statusCounts.reduce((sum, s) => sum + s.count, 0)
+  
+  return statusCounts.map(({ stage, count }) => ({
+    stage,
+    count,
+    percentage: total > 0 ? (count / total) * 100 : 0,
+  }))
 }
 
 export async function getICPPerformance(): Promise<{
@@ -118,19 +115,24 @@ export async function getICPPerformance(): Promise<{
   qualificationRate: number
   averageScore: number
 }> {
-  const { data, error } = await supabase
-    .from('companies')
-    .select('icp_qualified, icp_score')
+  // Use count queries and aggregate for better performance
+  const [totalResult, qualifiedResult, scoresResult] = await Promise.all([
+    supabase.from('companies').select('id', { count: 'exact', head: true }),
+    supabase.from('companies').select('id', { count: 'exact', head: true }).eq('icp_qualified', true),
+    supabase.from('companies').select('icp_score').not('icp_score', 'is', null).limit(1000),
+  ])
 
-  if (error) throw error
+  if (totalResult.error) throw totalResult.error
+  if (qualifiedResult.error) throw qualifiedResult.error
+  if (scoresResult.error) throw scoresResult.error
 
-  const companies = (data || []) as Array<{ icp_qualified: boolean; icp_score: number | null }>
-  const totalCompanies = companies.length
-  const qualifiedCompanies = companies.filter((c) => c.icp_qualified).length
+  const totalCompanies = totalResult.count || 0
+  const qualifiedCompanies = qualifiedResult.count || 0
   const qualificationRate = totalCompanies > 0 ? (qualifiedCompanies / totalCompanies) * 100 : 0
-  const averageScore =
-    companies.length > 0
-      ? companies.reduce((sum, c) => sum + (c.icp_score || 0), 0) / companies.length
+  
+  const scores = (scoresResult.data || []) as Array<{ icp_score: number }>
+  const averageScore = scores.length > 0
+    ? scores.reduce((sum, c) => sum + (c.icp_score || 0), 0) / scores.length
       : 0
 
   return {

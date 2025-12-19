@@ -46,8 +46,9 @@ export function useDomainWarmup(domain?: string) {
   return useQuery({
     queryKey: ['domain-warmup', domain],
     queryFn: () => getDomainWarmup(domain),
-    refetchInterval: 5 * 60 * 1000, // Refresh every 5 minutes
-    staleTime: 2 * 60 * 1000, // Consider stale after 2 minutes
+    refetchInterval: 10 * 60 * 1000, // Refresh every 10 minutes (reduced frequency)
+    staleTime: 5 * 60 * 1000, // Consider stale after 5 minutes
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -55,7 +56,9 @@ export function useAllDomainWarmup(filters?: DomainWarmupFilters) {
   return useQuery({
     queryKey: ['domain-warmup-all', filters],
     queryFn: () => getAllDomainWarmup(filters),
-    refetchInterval: 5 * 60 * 1000,
+    refetchInterval: 10 * 60 * 1000, // Refresh every 10 minutes
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -146,8 +149,9 @@ export function useRespondedLeads() {
   return useQuery({
     queryKey: ['responded-leads'],
     queryFn: () => getRespondedLeads(),
-    staleTime: 30000, // 30 seconds
-    refetchInterval: 60000, // Refetch every minute to catch new responses
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes (reduced from 1 minute)
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -163,8 +167,9 @@ export function useFollowupQueue(filters?: { status?: string }) {
   return useQuery({
     queryKey: ['followup-queue', filters],
     queryFn: () => getFollowupQueue(filters),
-    staleTime: 30000,
-    refetchInterval: 60000, // Refetch every minute
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes (reduced from 1 minute)
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -202,8 +207,9 @@ export function useOutreachMetrics(filters?: MetricsFilters) {
   return useQuery({
     queryKey: ['outreach-metrics', filters],
     queryFn: () => getOutreachMetrics(filters),
-    refetchInterval: 60000, // Refresh every minute
-    staleTime: 30000,
+    refetchInterval: 5 * 60 * 1000, // Refresh every 5 minutes (reduced from 1 minute)
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -765,7 +771,9 @@ export function useCalendarStatus() {
       const data = await response.json()
       return data.status
     },
-    refetchInterval: 60000, // Refresh every minute
+    refetchInterval: 5 * 60 * 1000, // Refresh every 5 minutes (reduced from 1 minute)
+    staleTime: 2 * 60 * 1000,
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -1025,6 +1033,161 @@ export function usePersonalizePreview() {
       }
 
       return response.json()
+    },
+  })
+}
+
+// ============================================================================
+// AI RESPONDER CONFIG HOOKS
+// ============================================================================
+
+export function useAIResponderConfig() {
+  return useQuery({
+    queryKey: ['ai-responder-config'],
+    queryFn: async () => {
+      const response = await fetch('/api/outreach/ai-responder-config')
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to fetch AI responder config')
+      }
+
+      const data = await response.json()
+      return data.config
+    },
+  })
+}
+
+export function useSaveAIResponderConfig() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (config: {
+      enabled: boolean
+      auto_send: boolean
+      strategy: 'aggressive' | 'moderate' | 'conservative'
+      response_prompt: string
+      response_delay_minutes: number
+    }) => {
+      const response = await fetch('/api/outreach/ai-responder-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to save AI responder config')
+      }
+
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ai-responder-config'] })
+    },
+  })
+}
+
+// ============================================================================
+// PENDING RESPONSES HOOKS
+// ============================================================================
+
+export function usePendingResponses(leadId?: string, status?: string) {
+  return useQuery({
+    queryKey: ['pending-responses', leadId, status],
+    queryFn: async () => {
+      const params = new URLSearchParams()
+      if (leadId) params.append('lead_id', leadId)
+      if (status) params.append('status', status)
+
+      const response = await fetch(`/api/outreach/pending-responses?${params}`)
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to fetch pending responses')
+      }
+
+      const data = await response.json()
+      return leadId && status === 'pending' ? data.response : data.responses
+    },
+    enabled: true,
+    refetchInterval: 2 * 60 * 1000, // Refetch every 2 minutes (reduced from 30 seconds)
+    staleTime: 60 * 1000, // 1 minute
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function usePendingResponse(leadId: string) {
+  return useQuery({
+    queryKey: ['pending-response', leadId],
+    queryFn: async () => {
+      const response = await fetch(`/api/outreach/pending-responses?lead_id=${leadId}&status=pending`)
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to fetch pending response')
+      }
+
+      const data = await response.json()
+      return data.response
+    },
+    enabled: !!leadId,
+    refetchInterval: 2 * 60 * 1000, // Refetch every 2 minutes (reduced from 30 seconds)
+    staleTime: 60 * 1000, // 1 minute
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useSavePendingResponse() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (response: {
+      lead_id: string
+      email_message_id?: string
+      campaign_id?: string
+      subject: string
+      content: string
+      status?: 'pending' | 'approved' | 'rejected' | 'sent'
+    }) => {
+      const apiResponse = await fetch('/api/outreach/pending-responses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(response),
+      })
+
+      if (!apiResponse.ok) {
+        const error = await apiResponse.json()
+        throw new Error(error.error || 'Failed to save pending response')
+      }
+
+      return apiResponse.json()
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['pending-responses'] })
+      queryClient.invalidateQueries({ queryKey: ['pending-response', variables.lead_id] })
+    },
+  })
+}
+
+export function useUpdatePendingResponse() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: any }) => {
+      const response = await fetch('/api/outreach/pending-responses', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...updates }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to update pending response')
+      }
+
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pending-responses'] })
+      queryClient.invalidateQueries({ queryKey: ['pending-response'] })
     },
   })
 }

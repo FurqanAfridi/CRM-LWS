@@ -264,7 +264,7 @@ export default function LeadsPage() {
     
     try {
       // Trigger webhook
-      const response = await fetch('https://auto.lincolnwaste.co/webhook/66c0815f-ea55-4f27-a675-de1998b25a62', {
+      const response = await fetch('https://auto.lincolnwaste.co/webhook/fetch', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -331,7 +331,7 @@ export default function LeadsPage() {
     
     try {
       // Trigger verify webhook
-      const response = await fetch('http://auto.lincolnwaste.co/webhook/ICP', {
+      const response = await fetch('https://auto.lincolnwaste.co/webhook/DNSResolve', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

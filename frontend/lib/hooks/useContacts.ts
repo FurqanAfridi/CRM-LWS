@@ -20,8 +20,8 @@ export function useContacts(filters?: ContactFilters) {
     retry: 0,
     retryOnMount: false,
     refetchOnWindowFocus: false,
-    staleTime: 0, // Always fetch fresh data for faster updates
-    gcTime: 0, // No garbage collection delay
+    staleTime: 30000, // Cache for 30 seconds (was 0 - causing constant refetches)
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   })
 }
 

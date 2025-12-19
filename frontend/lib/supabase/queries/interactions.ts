@@ -14,11 +14,20 @@ export async function getInteractions(filters?: InteractionFilters) {
   let query = supabase
     .from('interactions')
     .select(`
-      *,
-      leads (*),
-      contacts (*)
+      id,
+      lead_id,
+      contact_id,
+      interaction_type,
+      interaction_direction,
+      notes,
+      outcome,
+      created_at,
+      updated_at,
+      leads (id, name, email, company_name),
+      contacts (id, first_name, last_name, email)
     `)
     .order('created_at', { ascending: false })
+    .limit(500) // Add reasonable limit
 
   if (filters?.lead_id) {
     query = query.eq('lead_id', filters.lead_id)

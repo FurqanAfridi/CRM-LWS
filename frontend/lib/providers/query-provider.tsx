@@ -9,12 +9,12 @@ export function QueryClientProviderWrapper({ children }: { children: React.React
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 30000, // Cache for 30 seconds
+            staleTime: 2 * 60 * 1000, // Cache for 2 minutes (increased from 30 seconds)
             refetchOnWindowFocus: false,
-            retry: 0, // No retries for faster failure
+            retry: 1, // Retry once for network errors
             retryOnMount: false, // Prevent double fetch on mount
             refetchOnReconnect: false,
-            gcTime: 5 * 60 * 1000, // 5 minutes garbage collection time
+            gcTime: 10 * 60 * 1000, // 10 minutes garbage collection time (increased from 5)
           },
         },
       })

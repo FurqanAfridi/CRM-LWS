@@ -182,10 +182,10 @@ export async function updateEmailCampaign(id: string, updates: EmailCampaignUpda
 export async function getCampaignMessages(campaignId: string) {
   const { data, error } = await supabase
     .from('email_messages')
-    .select('*')
+    .select('id, lead_id, campaign_id, sequence_step, subject, content, status, sent_at, delivered_at, opened_at, replied_at, bounce_reason, created_at, updated_at, sent_to')
     .eq('campaign_id', campaignId)
-    .order('sequence_step', { ascending: true })
-    .order('created_at', { ascending: true })
+    .order('sent_at', { ascending: false })
+    .limit(200) // Limit to last 200 messages per campaign
 
   if (error) throw error
   return (data || []) as EmailMessage[]
@@ -194,9 +194,10 @@ export async function getCampaignMessages(campaignId: string) {
 export async function getLeadMessages(leadId: string) {
   const { data, error } = await supabase
     .from('email_messages')
-    .select('*')
+    .select('id, lead_id, campaign_id, sequence_step, subject, content, status, sent_at, delivered_at, opened_at, replied_at, bounce_reason, created_at, updated_at, sent_to')
     .eq('lead_id', leadId)
     .order('created_at', { ascending: false })
+    .limit(100) // Limit to last 100 messages
 
   if (error) throw error
   return (data || []) as EmailMessage[]
@@ -284,7 +285,8 @@ export async function getRespondedLeads() {
   }
   const leads = (leadsData || []) as LeadBasic[]
 
-  // For each lead, combine the data
+  // Optimize: Get message counts and last replied message in a single query per lead
+  // Instead of fetching all messages, we'll get aggregated data
   const leadsWithStats = await Promise.all(
     leads.map(async (lead) => {
       // Find active campaign for this lead
@@ -293,23 +295,51 @@ export async function getRespondedLeads() {
         (c.status === 'active' || c.status === 'paused' || c.status === 'pending')
       ) || campaigns.find((c) => c.lead_id === lead.id) || null
 
-      // Get all messages for this lead
-      const { data: messagesData, error: messagesError } = await supabase
+      // Get only the last replied message (most recent) and count stats
+      const { data: lastRepliedMessage, error: repliedError } = await supabase
         .from('email_messages')
-        .select('*')
+        .select('id, subject, content, sequence_step, sent_at, replied_at')
+        .eq('lead_id', lead.id)
+        .eq('status', 'replied')
+        .not('replied_at', 'is', null)
+        .order('replied_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (repliedError && repliedError.code !== 'PGRST116') throw repliedError
+
+      // Get total message count and last sent message (optimized - only get what we need)
+      const { data: lastSentMessage, error: sentError } = await supabase
+        .from('email_messages')
+        .select('sent_at, status')
         .eq('lead_id', lead.id)
         .order('sent_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
 
-      if (messagesError) throw messagesError
+      if (sentError && sentError.code !== 'PGRST116') throw sentError
 
-      const messages = (messagesData || []) as EmailMessage[]
-      const totalEmailsSent = messages.length || 0
-      const replyCount = messages.filter((m: EmailMessage) => m.status === 'replied').length || 0
-      const repliedMessagesList = messages.filter((m: EmailMessage) => m.status === 'replied') || []
-      const lastRepliedAt = repliedMessagesList.length > 0 
-        ? repliedMessagesList[0]?.replied_at || null
-        : null
-      const lastEmailSentAt = messages?.[0]?.sent_at || null
+      // Get reply count (use count instead of fetching all)
+      const { count: replyCount, error: countError } = await supabase
+        .from('email_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('lead_id', lead.id)
+        .eq('status', 'replied')
+
+      if (countError) throw countError
+
+      // Get total sent count
+      const { count: totalEmailsSent, error: totalCountError } = await supabase
+        .from('email_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('lead_id', lead.id)
+        .in('status', ['sent', 'delivered', 'opened', 'replied'])
+
+      if (totalCountError) throw totalCountError
+
+      const lastRepliedAt = lastRepliedMessage?.replied_at || null
+      const lastEmailSentAt = lastSentMessage?.sent_at || null
+      const repliedMessagesList = lastRepliedMessage ? [lastRepliedMessage] : []
 
       return {
         lead_id: lead.id,
@@ -325,8 +355,8 @@ export async function getRespondedLeads() {
           : null,
         campaign_status: campaign?.status || 'unknown',
         current_step: campaign?.current_step || 0,
-        total_emails_sent: totalEmailsSent,
-        reply_count: replyCount,
+        total_emails_sent: totalEmailsSent || 0,
+        reply_count: replyCount || 0,
         last_replied_at: lastRepliedAt,
         last_email_sent_at: lastEmailSentAt,
         started_at: campaign?.started_at || null,
@@ -355,10 +385,10 @@ export async function getRespondedLeads() {
 export async function getLeadConversation(leadId: string) {
   const { data, error } = await supabase
     .from('email_messages')
-    .select('*')
+    .select('id, lead_id, campaign_id, sequence_step, subject, content, status, sent_at, delivered_at, opened_at, replied_at, bounce_reason, created_at, updated_at, sent_to')
     .eq('lead_id', leadId)
-    .order('sequence_step', { ascending: true })
     .order('sent_at', { ascending: true })
+    .limit(100) // Limit to last 100 messages to prevent loading too much data
 
   if (error) throw error
   return (data || []) as EmailMessage[]
@@ -418,6 +448,7 @@ export async function getFollowupQueue(filters?: { status?: string }) {
       )
     `)
     .order('scheduled_for', { ascending: true })
+    .limit(500) // Limit to 500 follow-ups to prevent loading too much data
 
   if (filters?.status) {
     query = query.eq('status', filters.status)
@@ -503,6 +534,9 @@ export async function getOutreachMetrics(filters?: MetricsFilters): Promise<Outr
   if (filters?.date_to) {
     query = query.lte('sent_at', filters.date_to)
   }
+
+  // Add limit to prevent loading too much data
+  query = query.limit(10000)
 
   const { data, error } = await query
 
@@ -1055,6 +1089,193 @@ export async function updateBookingTemplate(id: string, updates: Partial<Booking
 export async function deleteBookingTemplate(id: string) {
   const { error } = await supabase
     .from('booking_templates')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+// ============================================================================
+// AI RESPONDER CONFIG QUERIES
+// ============================================================================
+
+export interface AIResponderConfig {
+  id: string
+  user_id: string | null
+  enabled: boolean
+  auto_send: boolean
+  strategy: 'aggressive' | 'moderate' | 'conservative'
+  response_prompt: string
+  response_delay_minutes: number
+  created_at: string
+  updated_at: string
+}
+
+export async function getAIResponderConfig(userId?: string | null): Promise<AIResponderConfig | null> {
+  let query = supabase
+    .from('ai_responder_config')
+    .select('*')
+    .limit(1)
+
+  if (userId) {
+    query = query.eq('user_id', userId)
+  } else {
+    query = query.is('user_id', null)
+  }
+
+  const { data, error } = await query.order('updated_at', { ascending: false })
+
+  if (error) throw error
+  return (data && data.length > 0 ? data[0] : null) as AIResponderConfig | null
+}
+
+export async function createAIResponderConfig(config: Omit<AIResponderConfig, 'id' | 'created_at' | 'updated_at'>): Promise<AIResponderConfig> {
+  const { data, error } = await (supabase
+    .from('ai_responder_config') as any)
+    .insert(config)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data as AIResponderConfig
+}
+
+export async function updateAIResponderConfig(id: string, updates: Partial<AIResponderConfig>): Promise<AIResponderConfig> {
+  const { data, error } = await (supabase
+    .from('ai_responder_config') as any)
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data as AIResponderConfig
+}
+
+export async function upsertAIResponderConfig(config: {
+  user_id?: string | null
+  enabled: boolean
+  auto_send: boolean
+  strategy: 'aggressive' | 'moderate' | 'conservative'
+  response_prompt: string
+  response_delay_minutes: number
+}): Promise<AIResponderConfig> {
+  // Check if config exists
+  const existing = await getAIResponderConfig(config.user_id || null)
+
+  if (existing) {
+    return await updateAIResponderConfig(existing.id, config)
+  } else {
+    return await createAIResponderConfig(config)
+  }
+}
+
+// ============================================================================
+// PENDING RESPONSES QUERIES
+// ============================================================================
+
+export interface PendingResponse {
+  id: string
+  lead_id: string
+  email_message_id: string | null
+  campaign_id: string | null
+  subject: string
+  content: string
+  status: 'pending' | 'approved' | 'rejected' | 'sent'
+  user_changes: string | null
+  generated_at: string
+  reviewed_at: string | null
+  sent_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export async function getPendingResponses(leadId?: string, status?: string): Promise<PendingResponse[]> {
+  let query = supabase
+    .from('pending_responses')
+    .select('*')
+    .order('generated_at', { ascending: false })
+
+  if (leadId) {
+    query = query.eq('lead_id', leadId)
+  }
+
+  if (status) {
+    query = query.eq('status', status)
+  }
+
+  const { data, error } = await query
+
+  if (error) throw error
+  return (data || []) as PendingResponse[]
+}
+
+export async function getPendingResponseById(id: string): Promise<PendingResponse | null> {
+  const { data, error } = await supabase
+    .from('pending_responses')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  if (error) {
+    if (error.code === 'PGRST116') return null
+    throw error
+  }
+  return data as PendingResponse | null
+}
+
+export async function getPendingResponseByLead(leadId: string): Promise<PendingResponse | null> {
+  const { data, error } = await supabase
+    .from('pending_responses')
+    .select('*')
+    .eq('lead_id', leadId)
+    .eq('status', 'pending')
+    .order('generated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw error
+  return (data || null) as PendingResponse | null
+}
+
+export async function createPendingResponse(response: Omit<PendingResponse, 'id' | 'created_at' | 'updated_at'>): Promise<PendingResponse> {
+  const { data, error } = await (supabase
+    .from('pending_responses') as any)
+    .insert(response)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data as PendingResponse
+}
+
+export async function updatePendingResponse(id: string, updates: Partial<PendingResponse>): Promise<PendingResponse> {
+  const updateData: any = { ...updates }
+  
+  // Set reviewed_at when status changes to approved or rejected
+  if (updates.status === 'approved' || updates.status === 'rejected') {
+    updateData.reviewed_at = new Date().toISOString()
+  }
+  
+  // Set sent_at when status changes to sent
+  if (updates.status === 'sent') {
+    updateData.sent_at = new Date().toISOString()
+  }
+
+  const { data, error } = await (supabase
+    .from('pending_responses') as any)
+    .update(updateData)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data as PendingResponse
+}
+
+export async function deletePendingResponse(id: string) {
+  const { error } = await supabase
+    .from('pending_responses')
     .delete()
     .eq('id', id)
 

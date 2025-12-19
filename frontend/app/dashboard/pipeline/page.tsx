@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -23,13 +24,21 @@ export default function PipelinePage() {
   const [showPersonalization, setShowPersonalization] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
 
-  const { data: sequences, isLoading: sequencesLoading } = useEmailSequences()
+  const { data: sequences, isLoading: sequencesLoading, refetch: refetchSequences } = useEmailSequences()
   const builder = useSequenceBuilder()
+  const queryClient = useQueryClient()
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
-    // Trigger a window refresh to refetch all queries
-    window.location.reload()
+    try {
+      // Invalidate and refetch sequences
+      await queryClient.invalidateQueries({ queryKey: ['email-sequences'] })
+      await refetchSequences()
+    } catch (error) {
+      console.error('Error refreshing:', error)
+    } finally {
+      setIsRefreshing(false)
+    }
   }
 
   return (

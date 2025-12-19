@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Bot, Save, Power } from 'lucide-react'
+import { useAIResponderConfig, useSaveAIResponderConfig } from '@/lib/hooks/useOutreach'
 
 interface AIResponderConfigProps {
   onSave?: (config: any) => void
@@ -53,43 +54,36 @@ const strategyDescriptions = {
 }
 
 export function AIResponderConfig({ onSave }: AIResponderConfigProps) {
+  const { data: savedConfig, isLoading } = useAIResponderConfig()
+  const saveConfig = useSaveAIResponderConfig()
+  
   const [enabled, setEnabled] = useState(false)
   const [autoSend, setAutoSend] = useState(false)
   const [strategy, setStrategy] = useState<'aggressive' | 'moderate' | 'conservative'>('moderate')
   const [responsePrompt, setResponsePrompt] = useState(DEFAULT_RESPONSE_PROMPT)
   const [responseDelay, setResponseDelay] = useState<number>(0)
-  const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
-    // Load saved config from localStorage or API
-    const savedConfig = localStorage.getItem('ai-responder-config')
     if (savedConfig) {
-      try {
-        const config = JSON.parse(savedConfig)
-        setEnabled(config.enabled || false)
-        setAutoSend(config.autoSend || false)
-        setStrategy(config.strategy || 'moderate')
-        setResponsePrompt(config.responsePrompt || DEFAULT_RESPONSE_PROMPT)
-        setResponseDelay(config.responseDelay || 0)
-      } catch (e) {
-        console.error('Failed to load AI responder config:', e)
-      }
+      setEnabled(savedConfig.enabled || false)
+      setAutoSend(savedConfig.auto_send || false)
+      setStrategy(savedConfig.strategy || 'moderate')
+      setResponsePrompt(savedConfig.response_prompt || DEFAULT_RESPONSE_PROMPT)
+      setResponseDelay(savedConfig.response_delay_minutes || 0)
     }
-  }, [])
+  }, [savedConfig])
 
   const handleSave = async () => {
-    setIsSaving(true)
     try {
       const config = {
         enabled,
-        autoSend,
+        auto_send: autoSend,
         strategy,
-        responsePrompt,
-        responseDelay,
+        response_prompt: responsePrompt,
+        response_delay_minutes: responseDelay,
       }
       
-      // Save to localStorage (in production, save to API/database)
-      localStorage.setItem('ai-responder-config', JSON.stringify(config))
+      await saveConfig.mutateAsync(config)
       
       if (onSave) {
         onSave(config)
@@ -98,8 +92,6 @@ export function AIResponderConfig({ onSave }: AIResponderConfigProps) {
       alert('AI Responder configuration saved successfully!')
     } catch (error: any) {
       alert(error.message || 'Failed to save configuration')
-    } finally {
-      setIsSaving(false)
     }
   }
 
@@ -165,20 +157,20 @@ export function AIResponderConfig({ onSave }: AIResponderConfigProps) {
 
             <div>
               <Label htmlFor="responseDelay" className="text-[#004565]">
-                Response Delay (hours)
+                Response Delay (minutes)
               </Label>
               <Input
                 id="responseDelay"
                 type="number"
                 min="0"
-                max="72"
+                max="4320"
                 value={responseDelay}
                 onChange={(e) => setResponseDelay(parseInt(e.target.value) || 0)}
                 className="mt-1 border-[#004565]/30"
                 placeholder="0"
               />
               <p className="text-xs text-[#004565]/70 mt-1">
-                Wait this many hours before sending auto-responses (0 = immediate)
+                Wait this many minutes before sending auto-responses (0 = immediate, max 72 hours = 4320 minutes)
               </p>
             </div>
 
@@ -225,11 +217,11 @@ export function AIResponderConfig({ onSave }: AIResponderConfigProps) {
         <div className="flex justify-end gap-2 pt-4 border-t border-[#004565]/10">
           <Button
             onClick={handleSave}
-            disabled={isSaving}
+            disabled={saveConfig.isPending || isLoading}
             className="bg-[#004565] hover:bg-[#004565]/90 text-white"
           >
             <Save className="h-4 w-4 mr-2" />
-            {isSaving ? 'Saving...' : 'Save Configuration'}
+            {saveConfig.isPending ? 'Saving...' : 'Save Configuration'}
           </Button>
         </div>
       </CardContent>

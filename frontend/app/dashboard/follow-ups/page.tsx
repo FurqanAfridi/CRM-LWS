@@ -1,17 +1,161 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useFollowupQueue, useLeadConversation, usePauseSequence, useResumeSequence, useGenerateResponse, useSendManualEmail } from '@/lib/hooks/useOutreach'
-import { MessageSquare, Mail, Clock, Calendar, User, Building2, ArrowRight, Reply, Pause, Play, CheckCircle2, Filter, Search, Loader2, RefreshCw, Send } from 'lucide-react'
+import { useFollowupQueue, useLeadConversation, usePauseSequence, useResumeSequence, useAIResponderConfig, useLeadMessages, usePendingResponses, useUpdatePendingResponse } from '@/lib/hooks/useOutreach'
+import { MessageSquare, Mail, Clock, Calendar, User, Building2, ArrowRight, Reply, Pause, Play, CheckCircle2, Filter, Search, Loader2, Bot, Info, Bell } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 
 type FollowupStatus = 'pending' | 'sent' | 'cancelled' | 'skipped'
+
+// Component for each follow-up row
+function FollowUpRow({ 
+  item, 
+  daysSince, 
+  isAutoReplyEnabled, 
+  autoSendEnabled,
+  pendingResponse,
+  notificationQueue, 
+  setNotificationQueue,
+  onViewDetails,
+  onRespond,
+  onFollowUp,
+  getStatusBadge,
+}: {
+  item: any
+  daysSince: number
+  isAutoReplyEnabled: boolean
+  autoSendEnabled: boolean
+  pendingResponse: any | null
+  notificationQueue: Set<string>
+  setNotificationQueue: (fn: (prev: Set<string>) => Set<string>) => void
+  onViewDetails: (item: any) => void
+  onRespond: (item: any) => void
+  onFollowUp: (item: any) => void
+  getStatusBadge: (status: FollowupStatus) => JSX.Element
+}) {
+  const hasPendingResponse = pendingResponse && pendingResponse.status === 'pending'
+  const showNotification = hasPendingResponse && !autoSendEnabled && !notificationQueue.has(item.lead_id)
+  
+  // Add to notification queue when pending response is detected
+  useEffect(() => {
+    if (hasPendingResponse && !autoSendEnabled && !notificationQueue.has(item.lead_id)) {
+      setNotificationQueue(prev => new Set(prev).add(item.lead_id))
+      // Show browser notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('New AI Response Ready', {
+          body: `AI has generated a response for ${item.lead?.name || item.lead?.email}. Click to review.`,
+          icon: '/Lincoln.png',
+        })
+      }
+    }
+  }, [hasPendingResponse, autoSendEnabled, item.lead_id, item.lead?.name, item.lead?.email, notificationQueue, setNotificationQueue])
+  
+  // Enable respond button when:
+  // 1. Lead has responded
+  // 2. There's a pending response
+  // 3. Auto-send (without manual review) is OFF
+  const canRespond = item.responded && hasPendingResponse && !autoSendEnabled
+  
+  return (
+    <tr className={`border-b hover:bg-[#004565]/5 ${showNotification ? 'bg-yellow-50' : ''}`}>
+      <td className="px-6 py-4">
+        <div>
+          <div className="font-medium text-[#004565] flex items-center gap-2">
+            <User className="h-4 w-4" />
+            {item.lead?.name || item.lead?.email || 'Unknown'}
+          </div>
+          <div className="text-sm text-[#004565]/70">{item.lead?.email || '—'}</div>
+          {item.lead?.company_name && (
+            <div className="text-xs text-[#004565]/60 flex items-center gap-1 mt-1">
+              <Building2 className="h-3 w-3" />
+              {item.lead.company_name}
+            </div>
+          )}
+        </div>
+      </td>
+      <td className="px-6 py-4">
+        {item.sequence?.name ? (
+          <div>
+            <div className="font-medium text-[#004565]">{item.sequence.name}</div>
+            {item.campaign && (
+              <div className="text-xs text-[#004565]/60">Campaign: {item.campaign.status}</div>
+            )}
+          </div>
+        ) : (
+          <span className="text-[#004565]/50">No sequence</span>
+        )}
+      </td>
+      <td className="px-6 py-4">
+        <div className="font-medium text-[#004565]">#{item.followup_number}</div>
+      </td>
+      <td className="px-6 py-4">
+        <div className="text-sm font-medium text-[#004565]">
+          {daysSince === 0 ? 'Today' : `${daysSince} day${daysSince !== 1 ? 's' : ''}`}
+        </div>
+      </td>
+      <td className="px-6 py-4">
+        {getStatusBadge(item.status)}
+      </td>
+      <td className="px-6 py-4 text-center">
+        {item.responded ? (
+          <div className="flex items-center justify-center gap-2">
+            {hasPendingResponse && !autoSendEnabled && (
+              <Badge className="bg-yellow-500 text-white animate-pulse">
+                <Bell className="h-3 w-3 mr-1" />
+                New
+              </Badge>
+            )}
+            <Button
+              size="sm"
+              onClick={() => onRespond(item)}
+              disabled={!canRespond}
+              className="bg-green-500 hover:bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              title={
+                autoSendEnabled
+                  ? 'Auto-send is enabled. Responses are sent automatically without manual review.'
+                  : hasPendingResponse
+                  ? 'AI has generated a response. Click to review and approve.'
+                  : 'No AI-generated response available yet. Please wait for the AI to generate a response.'
+              }
+            >
+              <Reply className="h-4 w-4 mr-1" />
+              Respond
+            </Button>
+          </div>
+        ) : (
+          <Button
+            size="sm"
+            onClick={() => onFollowUp(item)}
+            disabled={isAutoReplyEnabled}
+            className="bg-[#004565] hover:bg-[#004565]/90 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            title={isAutoReplyEnabled ? 'AI auto-responder is enabled. Follow-ups are handled automatically.' : ''}
+          >
+            <Mail className="h-4 w-4 mr-1" />
+            Follow-up
+          </Button>
+        )}
+      </td>
+      <td className="px-6 py-4 text-right">
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onViewDetails(item)}
+            className="border-[#004565]/30 text-[#004565]"
+          >
+            View
+          </Button>
+        </div>
+      </td>
+    </tr>
+  )
+}
 
 export default function FollowUpsPage() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'sent' | 'cancelled' | 'skipped'>('all')
@@ -21,42 +165,78 @@ export default function FollowUpsPage() {
   )
   const pauseSequence = usePauseSequence()
   const resumeSequence = useResumeSequence()
-  const generateResponse = useGenerateResponse()
-  const sendEmail = useSendManualEmail()
+  const { data: aiResponderConfig } = useAIResponderConfig()
+  // Fetch all pending responses once instead of per-row
+  const { data: allPendingResponses } = usePendingResponses(undefined, 'pending')
   const [selectedFollowup, setSelectedFollowup] = useState<any>(null)
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
   const [showRespondDialog, setShowRespondDialog] = useState(false)
   const [suggestedResponse, setSuggestedResponse] = useState<{ subject: string; content: string } | null>(null)
   const [userChanges, setUserChanges] = useState<string>('')
-  const [isGeneratingResponse, setIsGeneratingResponse] = useState(false)
+  const [notificationQueue, setNotificationQueue] = useState<Set<string>>(new Set())
+  const updatePendingResponse = useUpdatePendingResponse()
 
-  const filteredFollowups = (followupQueue || []).filter((item) => {
-    const matchesSearch = 
-      (item.lead?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-      (item.lead?.email?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-      (item.lead?.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-      (item.sequence?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
+  // Request notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }, [])
+
+  // Memoize filtered followups to avoid re-filtering on every render
+  const filteredFollowups = useMemo(() => {
+    if (!followupQueue) return []
+    if (!searchTerm) return followupQueue
     
-    return matchesSearch
-  })
+    const searchLower = searchTerm.toLowerCase()
+    return followupQueue.filter((item) => {
+      return (
+        (item.lead?.name?.toLowerCase().includes(searchLower) || false) ||
+        (item.lead?.email?.toLowerCase().includes(searchLower) || false) ||
+        (item.lead?.company_name?.toLowerCase().includes(searchLower) || false) ||
+        (item.sequence?.name?.toLowerCase().includes(searchLower) || false)
+      )
+    })
+  }, [followupQueue, searchTerm])
 
-  const pendingCount = (followupQueue || []).filter((item) => item.status === 'pending').length
-  const sentCount = (followupQueue || []).filter((item) => item.status === 'sent').length
-  const cancelledCount = (followupQueue || []).filter((item) => item.status === 'cancelled').length
-  const skippedCount = (followupQueue || []).filter((item) => item.status === 'skipped').length
+  // Memoize counts to avoid recalculating on every render
+  const { pendingCount, sentCount, cancelledCount, skippedCount } = useMemo(() => {
+    if (!followupQueue) return { pendingCount: 0, sentCount: 0, cancelledCount: 0, skippedCount: 0 }
+    return {
+      pendingCount: followupQueue.filter((item) => item.status === 'pending').length,
+      sentCount: followupQueue.filter((item) => item.status === 'sent').length,
+      cancelledCount: followupQueue.filter((item) => item.status === 'cancelled').length,
+      skippedCount: followupQueue.filter((item) => item.status === 'skipped').length,
+    }
+  }, [followupQueue])
 
   const handleViewDetails = (item: any) => {
     setSelectedFollowup(item)
     setShowDetailsDialog(true)
   }
 
-  const getDaysSinceScheduled = (scheduledFor: string): number => {
+  // Fetch conversation messages for selected followup
+  const { data: conversationMessages, isLoading: isLoadingMessages } = useLeadMessages(
+    selectedFollowup?.lead_id || ''
+  )
+  
+  // Sort messages chronologically (oldest first)
+  const sortedMessages = conversationMessages
+    ? [...conversationMessages].sort((a, b) => {
+        const dateA = new Date(a.sent_at || a.created_at).getTime()
+        const dateB = new Date(b.sent_at || b.created_at).getTime()
+        return dateA - dateB
+      })
+    : []
+
+  // Memoize the function to avoid recreating it on every render
+  const getDaysSinceScheduled = useCallback((scheduledFor: string): number => {
     const scheduled = new Date(scheduledFor)
     const now = new Date()
     const diffTime = Math.abs(now.getTime() - scheduled.getTime())
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
     return diffDays
-  }
+  }, [])
 
   const handleFollowUp = async (item: any) => {
     // TODO: Implement follow-up action
@@ -68,73 +248,92 @@ export default function FollowUpsPage() {
     setSelectedFollowup(item)
     setShowRespondDialog(true)
     setUserChanges('')
-    setIsGeneratingResponse(true)
     
+    // Only load from pending_responses table - DO NOT call webhook
     try {
-      // Generate initial response - API will fetch conversation history
-      const result = await generateResponse.mutateAsync({
-        lead_id: item.lead_id,
-        conversation_history: undefined, // Let API fetch it
-        user_changes: null,
-      })
-      
-      setSuggestedResponse({
-        subject: result.subject || 'Re: Your inquiry',
-        content: result.content || '',
-      })
-    } catch (error: any) {
-      alert(error.message || 'Failed to generate response')
-      setShowRespondDialog(false)
-    } finally {
-      setIsGeneratingResponse(false)
-    }
-  }
-
-  const handleRegenerateResponse = async () => {
-    if (!selectedFollowup || !suggestedResponse) return
-    
-    setIsGeneratingResponse(true)
-    try {
-      // Regenerate response with user changes - API will fetch conversation history
-      const result = await generateResponse.mutateAsync({
-        lead_id: selectedFollowup.lead_id,
-        conversation_history: undefined, // Let API fetch it
-        user_changes: userChanges || null,
-      })
-      
-      setSuggestedResponse({
-        subject: result.subject || suggestedResponse.subject,
-        content: result.content || suggestedResponse.content,
-      })
-      // Clear changes after regeneration
-      setUserChanges('')
-    } catch (error: any) {
-      alert(error.message || 'Failed to regenerate response')
-    } finally {
-      setIsGeneratingResponse(false)
-    }
-  }
-
-  const handleSendResponse = async () => {
-    if (!selectedFollowup || !suggestedResponse) return
-    
-    try {
-      await sendEmail.mutateAsync({
-        lead_id: selectedFollowup.lead_id,
-        subject: suggestedResponse.subject,
-        content: suggestedResponse.content,
-      })
-      
-      alert('Response sent successfully!')
-      setShowRespondDialog(false)
+      const pendingResponse = await fetch(`/api/outreach/pending-responses?lead_id=${item.lead_id}&status=pending`)
+      if (pendingResponse.ok) {
+        const data = await pendingResponse.json()
+        if (data.response) {
+          // Use existing pending response from database
+          setSuggestedResponse({
+            subject: data.response.subject,
+            content: data.response.content,
+          })
+          setUserChanges(data.response.user_changes || '')
+          // Clear notification for this lead
+          setNotificationQueue(prev => {
+            const next = new Set(prev)
+            next.delete(item.lead_id)
+            return next
+          })
+        } else {
+          // No pending response available yet
+          setSuggestedResponse(null)
+          alert('No AI-generated response is available yet. Please wait for the AI to generate a response.')
+          setShowRespondDialog(false)
+        }
+      } else {
+        // Error fetching or no response
+        setSuggestedResponse(null)
+        alert('No AI-generated response is available yet. Please wait for the AI to generate a response.')
+        setShowRespondDialog(false)
+      }
+    } catch (error) {
+      console.error('Failed to fetch pending response:', error)
       setSuggestedResponse(null)
-      setUserChanges('')
-    } catch (error: any) {
-      alert(error.message || 'Failed to send response')
+      alert('Failed to load pending response. Please try again.')
+      setShowRespondDialog(false)
     }
   }
 
-  const getStatusBadge = (status: FollowupStatus) => {
+
+  const handleApproveResponse = async () => {
+    if (!selectedFollowup || !suggestedResponse) return
+    
+    try {
+      // Check if there's a pending response to update
+      const pendingCheck = await fetch(`/api/outreach/pending-responses?lead_id=${selectedFollowup.lead_id}&status=pending`)
+      
+      if (pendingCheck.ok) {
+        const pendingData = await pendingCheck.json()
+        if (pendingData.response) {
+          // Update existing pending response with user's changes and mark as approved
+          // n8n will automatically send the email when status changes to 'approved'
+          await updatePendingResponse.mutateAsync({
+            id: pendingData.response.id,
+            updates: {
+              subject: suggestedResponse.subject,
+              content: suggestedResponse.content,
+              user_changes: userChanges || null,
+              status: 'approved',
+              approved_at: new Date().toISOString(),
+            },
+          })
+          
+          alert('Response approved! n8n will automatically send the email.')
+          setShowRespondDialog(false)
+          setSuggestedResponse(null)
+          setUserChanges('')
+          // Clear notification
+          setNotificationQueue(prev => {
+            const next = new Set(prev)
+            next.delete(selectedFollowup.lead_id)
+            return next
+          })
+        } else {
+          alert('No pending response found to approve.')
+        }
+      } else {
+        alert('Failed to fetch pending response.')
+      }
+    } catch (error: any) {
+      alert(error.message || 'Failed to approve response')
+    }
+  }
+
+  // Memoize status badge function
+  const getStatusBadge = useCallback((status: FollowupStatus) => {
     switch (status) {
       case 'pending':
         return <Badge className="bg-yellow-500 text-white"><Clock className="h-3 w-3 mr-1" />Pending</Badge>
@@ -147,7 +346,7 @@ export default function FollowUpsPage() {
       default:
         return <Badge>{status}</Badge>
     }
-  }
+  }, [])
 
   if (leadsLoading) {
     return (
@@ -169,6 +368,9 @@ export default function FollowUpsPage() {
     )
   }
 
+  const isAutoReplyEnabled = aiResponderConfig?.enabled && aiResponderConfig?.auto_send
+  const autoSendEnabled = aiResponderConfig?.auto_send || false // Auto-send without manual review
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -178,6 +380,34 @@ export default function FollowUpsPage() {
           <p className="text-[#004565]/80 mt-2 font-medium">Manage responses and continue sequences</p>
         </div>
       </div>
+
+      {/* AI Auto-Responder Notice */}
+      {isAutoReplyEnabled && (
+        <Card className="border-blue-300 bg-blue-50 shadow-md">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 mt-0.5">
+                <Bot className="h-5 w-5 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="font-semibold text-blue-900">AI Auto-Responder is Enabled</h3>
+                  <Badge className="bg-blue-600 text-white">Active</Badge>
+                </div>
+                <p className="text-sm text-blue-800">
+                  The AI auto-responder is currently handling responses automatically. Manual replies are disabled to prevent conflicts. 
+                  You can manage the AI responder settings in the <strong>Pipeline</strong> page.
+                </p>
+                {aiResponderConfig?.response_delay_minutes > 0 && (
+                  <p className="text-xs text-blue-700 mt-2">
+                    Responses are sent automatically after a {aiResponderConfig.response_delay_minutes} minute delay.
+                  </p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4">
@@ -293,80 +523,23 @@ export default function FollowUpsPage() {
                 ) : (
                   filteredFollowups.map((item) => {
                     const daysSince = getDaysSinceScheduled(item.scheduled_for)
+                    // Find pending response for this lead from the single query
+                    const pendingResponse = allPendingResponses?.find((r: any) => r.lead_id === item.lead_id) || null
                     return (
-                      <tr key={item.id} className="border-b hover:bg-[#004565]/5">
-                        <td className="px-6 py-4">
-                          <div>
-                            <div className="font-medium text-[#004565] flex items-center gap-2">
-                              <User className="h-4 w-4" />
-                              {item.lead?.name || item.lead?.email || 'Unknown'}
-                            </div>
-                            <div className="text-sm text-[#004565]/70">{item.lead?.email || '—'}</div>
-                            {item.lead?.company_name && (
-                              <div className="text-xs text-[#004565]/60 flex items-center gap-1 mt-1">
-                                <Building2 className="h-3 w-3" />
-                                {item.lead.company_name}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          {item.sequence?.name ? (
-                            <div>
-                              <div className="font-medium text-[#004565]">{item.sequence.name}</div>
-                              {item.campaign && (
-                                <div className="text-xs text-[#004565]/60">Campaign: {item.campaign.status}</div>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-[#004565]/50">No sequence</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="font-medium text-[#004565]">#{item.followup_number}</div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-medium text-[#004565]">
-                            {daysSince === 0 ? 'Today' : `${daysSince} day${daysSince !== 1 ? 's' : ''}`}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          {getStatusBadge(item.status)}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          {item.responded ? (
-                            <Button
-                              size="sm"
-                              onClick={() => handleRespond(item)}
-                              className="bg-green-500 hover:bg-green-600 text-white"
-                            >
-                              <Reply className="h-4 w-4 mr-1" />
-                              Respond
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              onClick={() => handleFollowUp(item)}
-                              className="bg-[#004565] hover:bg-[#004565]/90 text-white"
-                            >
-                              <Mail className="h-4 w-4 mr-1" />
-                              Follow-up
-                            </Button>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleViewDetails(item)}
-                              className="border-[#004565]/30 text-[#004565]"
-                            >
-                              View
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
+                      <FollowUpRow
+                        key={item.id}
+                        item={item}
+                        daysSince={daysSince}
+                        isAutoReplyEnabled={isAutoReplyEnabled}
+                        autoSendEnabled={autoSendEnabled}
+                        pendingResponse={pendingResponse}
+                        notificationQueue={notificationQueue}
+                        setNotificationQueue={setNotificationQueue}
+                        onViewDetails={handleViewDetails}
+                        onRespond={handleRespond}
+                        onFollowUp={handleFollowUp}
+                        getStatusBadge={getStatusBadge}
+                      />
                     )
                   })
                 )}
@@ -386,12 +559,7 @@ export default function FollowUpsPage() {
             </DialogDescription>
           </DialogHeader>
           
-          {isGeneratingResponse ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-[#004565]" />
-              <span className="ml-3 text-[#004565]">Generating response...</span>
-            </div>
-          ) : suggestedResponse ? (
+          {suggestedResponse ? (
             <div className="space-y-6">
               {/* Suggested Response */}
               <Card className="border-[#004565]/20">
@@ -415,30 +583,21 @@ export default function FollowUpsPage() {
                 </CardContent>
               </Card>
 
-              {/* Changes Box */}
+              {/* User Changes Box */}
               <Card className="border-blue-200 bg-blue-50">
                 <CardContent className="p-4 space-y-4">
                   <div>
-                    <Label className="text-[#004565] font-semibold">Suggested Changes (Optional)</Label>
+                    <Label className="text-[#004565] font-semibold">Your Changes (Optional)</Label>
                     <p className="text-xs text-[#004565]/70 mb-2">
-                      Enter any changes or instructions to modify the response (e.g., "Make it more friendly", "Add pricing information", "Be more direct")
+                      You can edit the subject and content above, or add notes about changes you made below.
                     </p>
                     <Textarea
                       value={userChanges}
                       onChange={(e) => setUserChanges(e.target.value)}
-                      placeholder="e.g., Make it more casual and friendly..."
+                      placeholder="Add any notes about changes you made to the response..."
                       className="mt-1 min-h-[100px] border-blue-300"
                     />
                   </div>
-                  <Button
-                    onClick={handleRegenerateResponse}
-                    disabled={isGeneratingResponse}
-                    variant="outline"
-                    className="w-full border-blue-400 text-blue-700 hover:bg-blue-100"
-                  >
-                    <RefreshCw className={`h-4 w-4 mr-2 ${isGeneratingResponse ? 'animate-spin' : ''}`} />
-                    Regenerate Response
-                  </Button>
                 </CardContent>
               </Card>
 
@@ -456,12 +615,12 @@ export default function FollowUpsPage() {
                   Cancel
                 </Button>
                 <Button
-                  onClick={handleSendResponse}
-                  disabled={sendEmail.isPending}
+                  onClick={handleApproveResponse}
+                  disabled={updatePendingResponse.isPending}
                   className="bg-green-500 hover:bg-green-600 text-white"
                 >
-                  <Send className="h-4 w-4 mr-2" />
-                  {sendEmail.isPending ? 'Sending...' : 'Send Response'}
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  {updatePendingResponse.isPending ? 'Approving...' : 'Approve'}
                 </Button>
               </div>
             </div>
@@ -573,6 +732,118 @@ export default function FollowUpsPage() {
                       </div>
                     )}
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Conversation History */}
+              <Card className="border-[#004565]/20">
+                <CardContent className="p-4">
+                  <h3 className="font-semibold text-[#004565] mb-3 flex items-center gap-2">
+                    <MessageSquare className="h-5 w-5" />
+                    Conversation History
+                  </h3>
+                  
+                  {isLoadingMessages ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-[#004565]" />
+                      <span className="ml-2 text-[#004565]/70">Loading conversation...</span>
+                    </div>
+                  ) : sortedMessages && sortedMessages.length > 0 ? (
+                    <div className="space-y-4 max-h-[500px] overflow-y-auto">
+                      {sortedMessages.map((message: any, index: number) => {
+                          const messageDate = new Date(message.sent_at || message.created_at)
+                          const isOutbound = message.status !== 'replied' // Assuming outbound messages are not replies
+                          
+                          return (
+                            <div
+                              key={message.id || index}
+                              className={`p-4 rounded-lg border ${
+                                isOutbound
+                                  ? 'bg-blue-50 border-blue-200 ml-8'
+                                  : 'bg-green-50 border-green-200 mr-8'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  {isOutbound ? (
+                                    <Mail className="h-4 w-4 text-blue-600" />
+                                  ) : (
+                                    <Reply className="h-4 w-4 text-green-600" />
+                                  )}
+                                  <span className={`text-sm font-semibold ${
+                                    isOutbound ? 'text-blue-900' : 'text-green-900'
+                                  }`}>
+                                    {isOutbound ? 'Outbound' : 'Inbound'}
+                                  </span>
+                                  <Badge
+                                    className={`${
+                                      message.status === 'sent' || message.status === 'delivered'
+                                        ? 'bg-green-500'
+                                        : message.status === 'replied'
+                                        ? 'bg-blue-500'
+                                        : message.status === 'bounced' || message.status === 'failed'
+                                        ? 'bg-red-500'
+                                        : 'bg-gray-500'
+                                    } text-white text-xs`}
+                                  >
+                                    {message.status || 'queued'}
+                                  </Badge>
+                                </div>
+                                <div className="text-xs text-[#004565]/70">
+                                  {messageDate.toLocaleString()}
+                                </div>
+                              </div>
+                              
+                              {message.subject && (
+                                <div className="mb-2">
+                                  <span className="text-xs font-semibold text-[#004565]/70">Subject: </span>
+                                  <span className={`text-sm font-medium ${
+                                    isOutbound ? 'text-blue-900' : 'text-green-900'
+                                  }`}>
+                                    {message.subject}
+                                  </span>
+                                </div>
+                              )}
+                              
+                              <div className={`text-sm whitespace-pre-wrap ${
+                                isOutbound ? 'text-blue-800' : 'text-green-800'
+                              }`}>
+                                {message.content || '(No content)'}
+                              </div>
+                              
+                              <div className="mt-2 flex items-center gap-4 text-xs text-[#004565]/60">
+                                {message.sent_at && (
+                                  <span>Sent: {new Date(message.sent_at).toLocaleString()}</span>
+                                )}
+                                {message.delivered_at && (
+                                  <span>Delivered: {new Date(message.delivered_at).toLocaleString()}</span>
+                                )}
+                                {message.opened_at && (
+                                  <span>Opened: {new Date(message.opened_at).toLocaleString()}</span>
+                                )}
+                                {message.replied_at && (
+                                  <span>Replied: {new Date(message.replied_at).toLocaleString()}</span>
+                                )}
+                                {message.sequence_step !== undefined && (
+                                  <span>Step: {message.sequence_step}</span>
+                                )}
+                              </div>
+                              
+                              {message.bounce_reason && (
+                                <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                                  <strong>Bounce Reason:</strong> {message.bounce_reason}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-[#004565]/70">
+                      <MessageSquare className="h-12 w-12 mx-auto mb-3 text-[#004565]/30" />
+                      <p>No conversation history found</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
