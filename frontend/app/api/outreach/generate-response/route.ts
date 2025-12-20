@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     let conversation = conversation_history
     if (!conversation) {
       const conversationData = await getLeadConversation(lead_id)
-      conversation = conversationData?.messages || []
+      conversation = conversationData || []
     }
 
     // Prepare lead data for response generation
