@@ -193,7 +193,7 @@ export function AIResponderConfig({ onSave }: AIResponderConfigProps) {
                 placeholder="Enter your prompt template here..."
               />
               <p className="text-xs text-[#004565]/70 mt-1">
-                Use variables like {'{'} {'{'}}lead_name{'}'} {'}'}, {'{'} {'{'}}company_name{'}'} {'}'}, {'{'} {'{'}}conversation_history{'}'} {'}'}, {'{'} {'{'}}client_message{'}'} {'}'}
+                Use variables like {'{'} {'{'}lead_name{'}'} {'}'}, {'{'} {'{'}company_name{'}'} {'}'}, {'{'} {'{'}conversation_history{'}'} {'}'}, {'{'} {'{'}client_message{'}'} {'}'}
               </p>
             </div>
 

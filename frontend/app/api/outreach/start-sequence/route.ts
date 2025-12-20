@@ -24,14 +24,23 @@ export async function POST(request: NextRequest) {
       url.searchParams.append('lead_id', lead_id)
       url.searchParams.append('sequence_id', sequence_id)
       
-      console.log('Calling n8n webhook (GET):', url.toString())
-      console.log('Webhook payload (query params):', { lead_id, sequence_id })
+      // eslint-disable-next-line no-console
+      if (process.env.NODE_ENV === 'development') {
+        // eslint-disable-next-line no-console
+        console.log('Calling n8n webhook (GET):', url.toString())
+        // eslint-disable-next-line no-console
+        console.log('Webhook payload (query params):', { lead_id, sequence_id })
+      }
       
       const n8nResponse = await fetch(url.toString(), {
         method: 'GET',
       })
       
-      console.log('Webhook response status:', n8nResponse.status)
+      // eslint-disable-next-line no-console
+      if (process.env.NODE_ENV === 'development') {
+        // eslint-disable-next-line no-console
+        console.log('Webhook response status:', n8nResponse.status)
+      }
 
       n8nData = await n8nResponse.json().catch(() => ({}))
 
