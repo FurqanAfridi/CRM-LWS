@@ -296,7 +296,7 @@ export async function getRespondedLeads() {
       ) || campaigns.find((c) => c.lead_id === lead.id) || null
 
       // Get only the last replied message (most recent) and count stats
-      const { data: lastRepliedMessage, error: repliedError } = await supabase
+      const { data: lastRepliedMessageData, error: repliedError } = await supabase
         .from('email_messages')
         .select('id, subject, content, sequence_step, sent_at, replied_at')
         .eq('lead_id', lead.id)
@@ -307,9 +307,10 @@ export async function getRespondedLeads() {
         .maybeSingle()
 
       if (repliedError && repliedError.code !== 'PGRST116') throw repliedError
+      const lastRepliedMessage = lastRepliedMessageData as { id: string; subject: string; content: string; sequence_step: number; sent_at: string; replied_at: string } | null
 
       // Get total message count and last sent message (optimized - only get what we need)
-      const { data: lastSentMessage, error: sentError } = await supabase
+      const { data: lastSentMessageData, error: sentError } = await supabase
         .from('email_messages')
         .select('sent_at, status')
         .eq('lead_id', lead.id)
@@ -318,6 +319,7 @@ export async function getRespondedLeads() {
         .maybeSingle()
 
       if (sentError && sentError.code !== 'PGRST116') throw sentError
+      const lastSentMessage = lastSentMessageData as { sent_at: string; status: string } | null
 
       // Get reply count (use count instead of fetching all)
       const { count: replyCount, error: countError } = await supabase
@@ -337,8 +339,8 @@ export async function getRespondedLeads() {
 
       if (totalCountError) throw totalCountError
 
-      const lastRepliedAt = lastRepliedMessage?.replied_at || null
-      const lastEmailSentAt = lastSentMessage?.sent_at || null
+      const lastRepliedAt = lastRepliedMessage ? lastRepliedMessage.replied_at : null
+      const lastEmailSentAt = lastSentMessage ? lastSentMessage.sent_at : null
       const repliedMessagesList = lastRepliedMessage ? [lastRepliedMessage] : []
 
       return {
@@ -1166,7 +1168,15 @@ export async function upsertAIResponderConfig(config: {
   if (existing) {
     return await updateAIResponderConfig(existing.id, config)
   } else {
-    return await createAIResponderConfig(config)
+    // Ensure user_id is provided (can be null)
+    return await createAIResponderConfig({
+      user_id: config.user_id ?? null,
+      enabled: config.enabled,
+      auto_send: config.auto_send,
+      strategy: config.strategy,
+      response_prompt: config.response_prompt,
+      response_delay_minutes: config.response_delay_minutes,
+    })
   }
 }
 

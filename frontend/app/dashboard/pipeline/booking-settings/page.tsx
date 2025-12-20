@@ -91,14 +91,7 @@ export default function BookingSettingsPage() {
       </div>
 
       {showCalendarIntegration && (
-        <CalendarIntegration
-          onConnect={(provider, credentials) => {
-            // Calendar connected: provider, credentials
-          }}
-          onDisconnect={(provider) => {
-            // Calendar disconnected: provider
-          }}
-        />
+        <CalendarIntegration />
       )}
 
       {showEmailRouting && (
