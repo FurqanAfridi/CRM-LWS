@@ -614,8 +614,14 @@ export async function getCalendarBookings(filters?: BookingFilters) {
     .from('calendar_bookings')
     .select(`
       *,
-      leads (*)
+      leads (
+        id,
+        name,
+        email,
+        company_name
+      )
     `)
+    .order('scheduled_time', { ascending: true })
     .order('created_at', { ascending: false })
 
   if (filters?.lead_id) {
@@ -1198,13 +1204,28 @@ export interface PendingResponse {
   sent_at: string | null
   created_at: string
   updated_at: string
+  leads?: {
+    id: string
+    name: string | null
+    email: string | null
+    company_name: string | null
+  } | null
 }
 
 export async function getPendingResponses(leadId?: string, status?: string): Promise<PendingResponse[]> {
   let query = supabase
     .from('pending_responses')
-    .select('*')
+    .select(`
+      *,
+      leads:lead_id (
+        id,
+        name,
+        email,
+        company_name
+      )
+    `)
     .order('generated_at', { ascending: false })
+    .limit(500) // Limit to prevent loading too much data
 
   if (leadId) {
     query = query.eq('lead_id', leadId)
@@ -1217,7 +1238,17 @@ export async function getPendingResponses(leadId?: string, status?: string): Pro
   const { data, error } = await query
 
   if (error) throw error
-  return (data || []) as PendingResponse[]
+  
+  // Transform the data to handle Supabase relation format
+  const transformed = (data || []).map((item: any) => {
+    const lead = Array.isArray(item.leads) ? item.leads[0] : item.leads
+    return {
+      ...item,
+      leads: lead || null,
+    }
+  })
+  
+  return transformed as PendingResponse[]
 }
 
 export async function getPendingResponseById(id: string): Promise<PendingResponse | null> {

@@ -12,6 +12,8 @@ import {
   TrendingUp,
   Mail,
   Reply,
+  Calendar,
+  MessageSquare,
 } from 'lucide-react'
 
 const navigation = [
@@ -19,6 +21,8 @@ const navigation = [
   { name: 'Leads', href: '/dashboard/leads', icon: Target },
   { name: 'Outreach', href: '/dashboard/outreach', icon: Mail },
   { name: 'Follow-ups', href: '/dashboard/follow-ups', icon: Reply },
+  { name: 'Responses', href: '/dashboard/responses', icon: MessageSquare },
+  { name: 'Bookings', href: '/dashboard/bookings', icon: Calendar },
   { name: 'Companies', href: '/dashboard/companies', icon: Building2 },
   { name: 'Contacts', href: '/dashboard/contacts', icon: Users },
   { name: 'Pipeline', href: '/dashboard/pipeline', icon: TrendingUp },

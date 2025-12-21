@@ -239,9 +239,38 @@ export default function FollowUpsPage() {
   }, [])
 
   const handleFollowUp = async (item: any) => {
-    // TODO: Implement follow-up action
-    // This could trigger sending the follow-up email or opening a dialog
-    alert(`Follow-up action for ${item.lead?.name || item.lead?.email} - Follow-up #${item.followup_number}`)
+    try {
+      const response = await fetch('https://auto.lincolnwaste.co/webhook/followup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          lead_id: item.lead_id,
+          campaign_id: item.campaign_id,
+          followup_id: item.id,
+          followup_number: item.followup_number,
+          scheduled_for: item.scheduled_for,
+          lead: {
+            id: item.lead?.id,
+            name: item.lead?.name,
+            email: item.lead?.email,
+            company_name: item.lead?.company_name,
+          },
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData?.error || errorData?.message || 'Failed to trigger follow-up')
+      }
+
+      const result = await response.json().catch(() => ({ success: true }))
+      alert(`Follow-up triggered successfully for ${item.lead?.name || item.lead?.email}`)
+    } catch (error: any) {
+      console.error('Error triggering follow-up:', error)
+      alert(error.message || 'Failed to trigger follow-up. Please try again.')
+    }
   }
 
   const handleRespond = async (item: any) => {
@@ -271,7 +300,7 @@ export default function FollowUpsPage() {
           // No pending response available yet
           setSuggestedResponse(null)
           alert('No AI-generated response is available yet. Please wait for the AI to generate a response.')
-          setShowRespondDialog(false)
+      setShowRespondDialog(false)
         }
       } else {
         // Error fetching or no response
@@ -303,18 +332,18 @@ export default function FollowUpsPage() {
           await updatePendingResponse.mutateAsync({
             id: pendingData.response.id,
             updates: {
-              subject: suggestedResponse.subject,
-              content: suggestedResponse.content,
+        subject: suggestedResponse.subject,
+        content: suggestedResponse.content,
               user_changes: userChanges || null,
               status: 'approved',
               approved_at: new Date().toISOString(),
             },
-          })
-          
+      })
+      
           alert('Response approved! n8n will automatically send the email.')
-          setShowRespondDialog(false)
-          setSuggestedResponse(null)
-          setUserChanges('')
+      setShowRespondDialog(false)
+      setSuggestedResponse(null)
+      setUserChanges('')
           // Clear notification
           setNotificationQueue(prev => {
             const next = new Set(prev)
