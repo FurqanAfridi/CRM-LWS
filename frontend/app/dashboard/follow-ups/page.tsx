@@ -184,19 +184,68 @@ export default function FollowUpsPage() {
   }, [])
 
   // Memoize filtered followups to avoid re-filtering on every render
+  // Deduplicate by lead_id to show each email only once
   const filteredFollowups = useMemo(() => {
     if (!followupQueue) return []
-    if (!searchTerm) return followupQueue
     
-    const searchLower = searchTerm.toLowerCase()
-    return followupQueue.filter((item) => {
-      return (
-        (item.lead?.name?.toLowerCase().includes(searchLower) || false) ||
-        (item.lead?.email?.toLowerCase().includes(searchLower) || false) ||
-        (item.lead?.company_name?.toLowerCase().includes(searchLower) || false) ||
-        (item.sequence?.name?.toLowerCase().includes(searchLower) || false)
-      )
+    // First, filter by search term if provided
+    let filtered = followupQueue
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase()
+      filtered = followupQueue.filter((item) => {
+        return (
+          (item.lead?.name?.toLowerCase().includes(searchLower) || false) ||
+          (item.lead?.email?.toLowerCase().includes(searchLower) || false) ||
+          (item.lead?.company_name?.toLowerCase().includes(searchLower) || false) ||
+          (item.sequence?.name?.toLowerCase().includes(searchLower) || false)
+        )
+      })
+    }
+    
+    // Deduplicate by lead_id - keep only one entry per lead
+    const leadMap = new Map<string, any>()
+    
+    filtered.forEach((item) => {
+      const leadId = item.lead_id
+      const existing = leadMap.get(leadId)
+      
+      if (!existing) {
+        // First occurrence of this lead
+        leadMap.set(leadId, item)
+      } else {
+        // Priority logic for duplicates:
+        // 1. Prefer 'pending' status over others
+        // 2. Prefer responded=true over responded=false
+        // 3. Prefer earlier scheduled_for date
+        const existingIsPending = existing.status === 'pending'
+        const currentIsPending = item.status === 'pending'
+        
+        if (currentIsPending && !existingIsPending) {
+          // Current is pending, existing is not - prefer current
+          leadMap.set(leadId, item)
+        } else if (!currentIsPending && existingIsPending) {
+          // Existing is pending, current is not - keep existing
+          // do nothing
+        } else {
+          // Both have same pending status, prefer responded=true
+          if (item.responded && !existing.responded) {
+            leadMap.set(leadId, item)
+          } else if (!item.responded && existing.responded) {
+            // keep existing
+          } else {
+            // Both have same responded status, prefer earlier scheduled_for
+            const existingDate = new Date(existing.scheduled_for).getTime()
+            const currentDate = new Date(item.scheduled_for).getTime()
+            if (currentDate < existingDate) {
+              leadMap.set(leadId, item)
+            }
+          }
+        }
+      }
     })
+    
+    // Convert map values back to array
+    return Array.from(leadMap.values())
   }, [followupQueue, searchTerm])
 
   // Memoize counts to avoid recalculating on every render
@@ -215,19 +264,30 @@ export default function FollowUpsPage() {
     setShowDetailsDialog(true)
   }
 
-  // Fetch conversation messages for selected followup
+  // Fetch conversation messages for selected followup from lead_email_conversations
   const { data: conversationMessages, isLoading: isLoadingMessages } = useLeadMessages(
     selectedFollowup?.lead_id || ''
   )
   
   // Sort messages chronologically (oldest first)
   const sortedMessages = conversationMessages
-    ? [...conversationMessages].sort((a, b) => {
+    ? [...conversationMessages].sort((a: any, b: any) => {
         const dateA = new Date(a.sent_at || a.created_at).getTime()
         const dateB = new Date(b.sent_at || b.created_at).getTime()
         return dateA - dateB
       })
     : []
+  
+  // Debug: Log conversation messages to verify direction field
+  useEffect(() => {
+    if (conversationMessages && conversationMessages.length > 0) {
+      console.log('Conversation messages loaded:', conversationMessages.length)
+      console.log('Directions found:', [...new Set(conversationMessages.map((m: any) => m.direction))])
+      conversationMessages.forEach((msg: any, idx: number) => {
+        console.log(`Message ${idx}: direction="${msg.direction}", subject="${msg.subject}"`)
+      })
+    }
+  }, [conversationMessages])
 
   // Memoize the function to avoid recreating it on every render
   const getDaysSinceScheduled = useCallback((scheduledFor: string): number => {
@@ -781,7 +841,10 @@ export default function FollowUpsPage() {
                     <div className="space-y-4 max-h-[500px] overflow-y-auto">
                       {sortedMessages.map((message: any, index: number) => {
                           const messageDate = new Date(message.sent_at || message.created_at)
-                          const isOutbound = message.status !== 'replied' // Assuming outbound messages are not replies
+                          // Use direction field from lead_email_conversations table
+                          // Direction can be 'inbound' or 'outbound' (lowercase)
+                          const direction = message.direction?.toLowerCase() || 'inbound'
+                          const isOutbound = direction === 'outbound'
                           
                           return (
                             <div
@@ -799,18 +862,16 @@ export default function FollowUpsPage() {
                                   ) : (
                                     <Reply className="h-4 w-4 text-green-600" />
                                   )}
-                                  <span className={`text-sm font-semibold ${
-                                    isOutbound ? 'text-blue-900' : 'text-green-900'
-                                  }`}>
-                                    {isOutbound ? 'Outbound' : 'Inbound'}
-                                  </span>
+                                  <Badge className={isOutbound ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'}>
+                                    {direction === 'outbound' ? 'OUTBOUND' : 'INBOUND'}
+                                  </Badge>
                                   <Badge
                                     className={`${
                                       message.status === 'sent' || message.status === 'delivered'
                                         ? 'bg-green-500'
                                         : message.status === 'replied'
                                         ? 'bg-blue-500'
-                                        : message.status === 'bounced' || message.status === 'failed'
+                                        : message.status === 'failed'
                                         ? 'bg-red-500'
                                         : 'bg-gray-500'
                                     } text-white text-xs`}
@@ -821,6 +882,25 @@ export default function FollowUpsPage() {
                                 <div className="text-xs text-[#004565]/70">
                                   {messageDate.toLocaleString()}
                                 </div>
+                              </div>
+                              
+                              {/* Email addresses */}
+                              <div className="mb-2 text-xs text-[#004565]/60">
+                                {message.from_email && (
+                                  <div>
+                                    <span className="font-semibold">From:</span> {message.from_email}
+                                  </div>
+                                )}
+                                {message.to_email && (
+                                  <div>
+                                    <span className="font-semibold">To:</span> {message.to_email}
+                                  </div>
+                                )}
+                                {message.cc_email && message.cc_email.length > 0 && (
+                                  <div>
+                                    <span className="font-semibold">CC:</span> {message.cc_email.join(', ')}
+                                  </div>
+                                )}
                               </div>
                               
                               {message.subject && (
@@ -834,10 +914,11 @@ export default function FollowUpsPage() {
                                 </div>
                               )}
                               
-                              <div className={`text-sm whitespace-pre-wrap ${
+                              {/* Message body content from body column */}
+                              <div className={`text-sm whitespace-pre-wrap mt-3 ${
                                 isOutbound ? 'text-blue-800' : 'text-green-800'
                               }`}>
-                                {message.content || '(No content)'}
+                                {message.body || '(No content)'}
                               </div>
                               
                               <div className="mt-2 flex items-center gap-4 text-xs text-[#004565]/60">
@@ -853,14 +934,17 @@ export default function FollowUpsPage() {
                                 {message.replied_at && (
                                   <span>Replied: {new Date(message.replied_at).toLocaleString()}</span>
                                 )}
-                                {message.sequence_step !== undefined && (
+                                {message.sequence_step !== null && message.sequence_step !== undefined && (
                                   <span>Step: {message.sequence_step}</span>
+                                )}
+                                {message.thread_id && (
+                                  <span>Thread: {message.thread_id.substring(0, 8)}...</span>
                                 )}
                               </div>
                               
-                              {message.bounce_reason && (
+                              {message.status === 'failed' && (
                                 <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
-                                  <strong>Bounce Reason:</strong> {message.bounce_reason}
+                                  <strong>Message failed to send</strong>
                                 </div>
                               )}
                             </div>

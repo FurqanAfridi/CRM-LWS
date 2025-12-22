@@ -191,17 +191,6 @@ export async function getCampaignMessages(campaignId: string) {
   return (data || []) as EmailMessage[]
 }
 
-export async function getLeadMessages(leadId: string) {
-  const { data, error } = await supabase
-    .from('email_messages')
-    .select('id, lead_id, campaign_id, sequence_step, subject, content, status, sent_at, delivered_at, opened_at, replied_at, bounce_reason, created_at, updated_at, sent_to')
-    .eq('lead_id', leadId)
-    .order('created_at', { ascending: false })
-    .limit(100) // Limit to last 100 messages
-
-  if (error) throw error
-  return (data || []) as EmailMessage[]
-}
 
 export async function createEmailMessage(message: EmailMessageInsert) {
   const { data, error } = await (supabase
@@ -383,17 +372,67 @@ export async function getRespondedLeads() {
   })
 }
 
-// Get full conversation thread for a lead
+// Get full conversation thread for a lead from lead_email_conversations table
+export interface LeadEmailConversation {
+  id: string
+  lead_id: string
+  campaign_id: string | null
+  sequence_step: number | null
+  direction: 'inbound' | 'outbound'
+  subject: string | null
+  body: string | null
+  from_email: string | null
+  to_email: string | null
+  cc_email: string[] | null
+  status: 'queued' | 'sent' | 'delivered' | 'opened' | 'replied' | 'failed'
+  sent_at: string | null
+  delivered_at: string | null
+  opened_at: string | null
+  replied_at: string | null
+  message_id: string | null
+  in_reply_to: string | null
+  thread_id: string | null
+  created_at: string
+}
+
 export async function getLeadConversation(leadId: string) {
   const { data, error } = await supabase
-    .from('email_messages')
-    .select('id, lead_id, campaign_id, sequence_step, subject, content, status, sent_at, delivered_at, opened_at, replied_at, bounce_reason, created_at, updated_at, sent_to')
+    .from('lead_email_conversations')
+    .select('id, lead_id, campaign_id, sequence_step, direction, subject, body, from_email, to_email, cc_email, status, sent_at, delivered_at, opened_at, replied_at, message_id, in_reply_to, thread_id, created_at')
     .eq('lead_id', leadId)
-    .order('sent_at', { ascending: true })
+    .order('created_at', { ascending: true })
     .limit(100) // Limit to last 100 messages to prevent loading too much data
 
-  if (error) throw error
-  return (data || []) as EmailMessage[]
+  if (error) {
+    console.error('Error fetching lead conversation:', error)
+    throw error
+  }
+  
+  // Debug log to verify data structure
+  if (data && data.length > 0) {
+    console.log('Fetched conversation messages:', data.length)
+    console.log('Sample message:', data[0])
+    console.log('Directions found:', [...new Set(data.map((m: any) => m.direction))])
+  }
+  
+  return (data || []) as LeadEmailConversation[]
+}
+
+// Legacy function - kept for backwards compatibility but now uses lead_email_conversations
+export async function getLeadMessages(leadId: string) {
+  const { data, error } = await supabase
+    .from('lead_email_conversations')
+    .select('id, lead_id, campaign_id, sequence_step, direction, subject, body, from_email, to_email, cc_email, status, sent_at, delivered_at, opened_at, replied_at, message_id, in_reply_to, thread_id, created_at')
+    .eq('lead_id', leadId)
+    .order('created_at', { ascending: false })
+    .limit(100) // Limit to last 100 messages
+
+  if (error) {
+    console.error('Error fetching lead messages:', error)
+    throw error
+  }
+  
+  return (data || []) as LeadEmailConversation[]
 }
 
 // ============================================================================
