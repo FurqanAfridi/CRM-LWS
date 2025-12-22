@@ -14,6 +14,49 @@ import Link from 'next/link'
 import { Target, Download, Mail, Building2, ArrowRight, DollarSign, TrendingUp, AlertCircle, MessageSquare, FileText, RefreshCw, CheckCircle2, XCircle, ShieldCheck, Plus, Play, Edit, ArrowUp, ArrowDown } from 'lucide-react'
 import { Database, LeadStatus, QualificationStatus } from '@/lib/supabase/types'
 import { StartSequenceDialog } from '@/components/outreach/StartSequenceDialog'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  horizontalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+
+// Sortable Header Component
+function SortableHeader({ id, children, onClick }: { id: string; children: React.ReactNode; onClick?: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id })
+  
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    cursor: 'move',
+    zIndex: transform ? 1 : 0, // Ensure dragged item is on top
+  }
+
+  return (
+    <th
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-move bg-[#004565]/5 relative group touch-none"
+      onClick={onClick}
+    >
+      {children}
+    </th>
+  )
+}
+
 
 type Lead = Database['public']['Tables']['leads']['Row']
 type LeadInsert = Database['public']['Tables']['leads']['Insert']
@@ -53,6 +96,141 @@ export default function LeadsPage() {
     lead_tier: '',
     notes: '',
   })
+
+
+  // Column definitions
+  const allColumns = {
+    hash: { label: '#', sortable: false },
+    name: { label: 'Name', sortable: true },
+    company_name: { label: 'Company', sortable: true },
+    title: { label: 'Title', sortable: true },
+    email: { label: 'Email', sortable: true },
+    email_verification: { label: 'Email Status', sortable: true },
+    source: { label: 'Source', sortable: true },
+    status: { label: 'Status', sortable: true },
+    qualification_status: { label: 'Qualification', sortable: true },
+    icp_score: { label: 'ICP Score', sortable: true },
+    estimated_value: { label: 'Value', sortable: true },
+    probability: { label: 'Probability', sortable: true },
+    lead_tier: { label: 'Lead Tier', sortable: true },
+  }
+
+  const [columnOrder, setColumnOrder] = useState<string[]>([
+    'hash',
+    'name', 
+    'company_name', 
+    'title', 
+    'email', 
+    'email_verification', 
+    'source', 
+    'status', 
+    'qualification_status', 
+    'icp_score', 
+    'estimated_value', 
+    'probability', 
+    'lead_tier'
+  ])
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Require 8px movement to start drag, allowing clicks for sorting
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (over && active.id !== over.id) {
+      setColumnOrder((items) => {
+        const oldIndex = items.indexOf(active.id as string)
+        const newIndex = items.indexOf(over.id as string)
+        return arrayMove(items, oldIndex, newIndex)
+      })
+    }
+  }
+
+  // Render cell helper
+  const renderCell = (lead: Lead, columnId: string, index: number) => {
+    switch (columnId) {
+      case 'hash':
+        return <div className="text-sm text-[#004565]/70 font-mono">{index + 1}</div>
+      case 'name':
+        return (
+          <div className="flex items-center">
+            <div className="flex-shrink-0 h-10 w-10 rounded-full bg-[#004565]/10 flex items-center justify-center">
+              <Target className="h-5 w-5 text-[#004565]" />
+            </div>
+            <div className="ml-4">
+              <div className="text-sm font-medium text-[#000000]">
+                {lead.name || `Lead #${lead.id.slice(0, 8)}`}
+              </div>
+              {lead.timeline_category && (
+                <div className="text-sm text-[#004565]/70">{lead.timeline_category}</div>
+              )}
+            </div>
+          </div>
+        )
+      case 'company_name':
+        return lead.company_name ? (
+          <div className="flex items-center text-sm text-[#000000]">
+            <Building2 className="h-4 w-4 mr-2 text-[#004565]/60" />
+            {lead.company_name}
+          </div>
+        ) : <span className="text-sm text-[#004565]/50">—</span>
+      case 'title':
+        return <div className="text-sm text-[#000000]">{lead.title || '—'}</div>
+      case 'email':
+        return lead.email ? (
+          <div className="flex items-center text-sm text-[#000000]">
+            <Mail className="h-4 w-4 mr-2 text-[#004565]/60" />
+            <a href={`mailto:${lead.email}`} className="text-[#376EE1] hover:text-[#004565] hover:underline">
+              {lead.email}
+            </a>
+          </div>
+        ) : <span className="text-sm text-[#004565]/50">—</span>
+      case 'email_verification':
+        return lead.email ? (
+          lead.email_verification === true || lead.email_verification === 'verified' ? (
+            <Badge className="bg-[#00CD50] hover:bg-[#00CD50]/90 text-white border-0"><CheckCircle2 className="h-3 w-3 mr-1" />Verified</Badge>
+          ) : lead.email_verification === false || lead.email_verification === 'unverified' ? (
+            <Badge variant="outline" className="border-red-300 text-red-600 bg-red-50"><XCircle className="h-3 w-3 mr-1" />Unverified</Badge>
+          ) : (
+            <Badge variant="outline" className="border-gray-300 text-gray-600 bg-gray-50"><AlertCircle className="h-3 w-3 mr-1" />Unknown</Badge>
+          )
+        ) : <span className="text-sm text-[#004565]/50">—</span>
+      case 'source':
+        return <div className="text-sm text-[#000000]">{lead.source || 'manual'}</div>
+      case 'status':
+        return <Badge variant={getStatusColor(lead.status || 'new')}>{lead.status || 'new'}</Badge>
+      case 'qualification_status':
+        return <Badge variant={getQualificationColor(lead.qualification_status || 'unqualified')}>{lead.qualification_status || 'unqualified'}</Badge>
+      case 'icp_score':
+        return (
+          <div className="flex items-center text-sm text-[#000000]">
+            <TrendingUp className="h-4 w-4 mr-1 text-[#00CD50]" />
+            {lead.icp_score || 0}/100
+          </div>
+        )
+      case 'estimated_value':
+        return lead.estimated_value ? (
+          <div className="flex items-center text-sm font-medium text-[#000000]">
+            <DollarSign className="h-4 w-4 mr-1 text-[#00CD50]" />
+            ${Number(lead.estimated_value).toLocaleString()}
+          </div>
+        ) : <span className="text-sm text-[#004565]/50">—</span>
+      case 'probability':
+        return <div className="text-sm text-[#000000]">{lead.probability || 0}%</div>
+      case 'lead_tier':
+        return lead.lead_tier ? <Badge variant="default">{lead.lead_tier}</Badge> : <span className="text-sm text-[#004565]/50">—</span>
+      default:
+        return null
+    }
+  }
 
   const handleSort = (key: string) => {
     setSortConfig((current) => {
@@ -385,6 +563,9 @@ export default function LeadsPage() {
         <div className="relative">
           <h1 className="text-4xl font-bold text-[#004565]">
             Leads
+            <span className="ml-2 text-2xl text-[#004565]/60 font-medium">
+              ({leads?.length || 0})
+            </span>
           </h1>
           <div className="absolute -top-2 -left-2 w-24 h-24 bg-[#376EE1]/20 rounded-full blur-2xl -z-10"></div>
         </div>
@@ -504,272 +685,89 @@ export default function LeadsPage() {
           <CardContent className="p-0">
             <div className="flex flex-col h-[calc(100vh-280px)]">
               <div className="overflow-x-scroll overflow-y-auto flex-1">
-                <table className="w-full">
-                  <thead className="sticky top-0 z-30 bg-[#004565]/5">
-                    <tr className="border-b bg-[#004565]/5">
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('name')}
-                      >
-                        <div className="flex items-center">
-                          Name
-                          <SortIcon columnKey="name" />
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('company_name')}
-                      >
-                        <div className="flex items-center">
-                          Company
-                          <SortIcon columnKey="company_name" />
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('title')}
-                      >
-                        <div className="flex items-center">
-                          Title
-                          <SortIcon columnKey="title" />
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('email')}
-                      >
-                        <div className="flex items-center">
-                          Email
-                          <SortIcon columnKey="email" />
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('email_verification')}
-                      >
-                        <div className="flex items-center">
-                          Email Status
-                          <SortIcon columnKey="email_verification" />
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('source')}
-                      >
-                        <div className="flex items-center">
-                          Source
-                          <SortIcon columnKey="source" />
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('status')}
-                      >
-                        <div className="flex items-center">
-                          Status
-                          <SortIcon columnKey="status" />
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('qualification_status')}
-                      >
-                        <div className="flex items-center">
-                          Qualification
-                          <SortIcon columnKey="qualification_status" />
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('icp_score')}
-                      >
-                        <div className="flex items-center">
-                          ICP Score
-                          <SortIcon columnKey="icp_score" />
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('estimated_value')}
-                      >
-                        <div className="flex items-center">
-                          Value
-                          <SortIcon columnKey="estimated_value" />
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('probability')}
-                      >
-                        <div className="flex items-center">
-                          Probability
-                          <SortIcon columnKey="probability" />
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('lead_tier')}
-                      >
-                        <div className="flex items-center">
-                          Lead Tier
-                          <SortIcon columnKey="lead_tier" />
-                        </div>
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-semibold text-[#004565] uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-[#004565]/10">
-                    {sortedLeads.map((lead) => (
-                    <tr key={lead.id} className="hover:bg-[#004565]/5 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-[#004565]/10 flex items-center justify-center">
-                            <Target className="h-5 w-5 text-[#004565]" />
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-[#000000]">
-                              {lead.name || `Lead #${lead.id.slice(0, 8)}`}
-                            </div>
-                            {lead.timeline_category && (
-                              <div className="text-sm text-[#004565]/70">{lead.timeline_category}</div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {lead.company_name ? (
-                          <div className="flex items-center text-sm text-[#000000]">
-                            <Building2 className="h-4 w-4 mr-2 text-[#004565]/60" />
-                            {lead.company_name}
-                          </div>
-                        ) : (
-                          <span className="text-sm text-[#004565]/50">—</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-[#000000]">{lead.title || '—'}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {lead.email ? (
-                          <div className="flex items-center text-sm text-[#000000]">
-                            <Mail className="h-4 w-4 mr-2 text-[#004565]/60" />
-                            <a
-                              href={`mailto:${lead.email}`}
-                              className="text-[#376EE1] hover:text-[#004565] hover:underline"
-                            >
-                              {lead.email}
-                            </a>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-[#004565]/50">—</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {lead.email ? (
-                          lead.email_verification === true || lead.email_verification === 'verified' ? (
-                            <Badge className="bg-[#00CD50] hover:bg-[#00CD50]/90 text-white border-0">
-                              <CheckCircle2 className="h-3 w-3 mr-1" />
-                              Verified
-                            </Badge>
-                          ) : lead.email_verification === false || lead.email_verification === 'unverified' ? (
-                            <Badge variant="outline" className="border-red-300 text-red-600 bg-red-50">
-                              <XCircle className="h-3 w-3 mr-1" />
-                              Unverified
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="border-gray-300 text-gray-600 bg-gray-50">
-                              <AlertCircle className="h-3 w-3 mr-1" />
-                              Unknown
-                            </Badge>
-                          )
-                        ) : (
-                          <span className="text-sm text-[#004565]/50">—</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-[#000000]">{lead.source || 'manual'}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Badge variant={getStatusColor(lead.status || 'new')}>
-                          {lead.status || 'new'}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Badge variant={getQualificationColor(lead.qualification_status || 'unqualified')}>
-                          {lead.qualification_status || 'unqualified'}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center text-sm text-[#000000]">
-                          <TrendingUp className="h-4 w-4 mr-1 text-[#00CD50]" />
-                          {lead.icp_score || 0}/100
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {lead.estimated_value ? (
-                          <div className="flex items-center text-sm font-medium text-[#000000]">
-                            <DollarSign className="h-4 w-4 mr-1 text-[#00CD50]" />
-                            ${Number(lead.estimated_value).toLocaleString()}
-                          </div>
-                        ) : (
-                          <span className="text-sm text-[#004565]/50">—</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-[#000000]">{lead.probability || 0}%</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {lead.lead_tier ? (
-                          <Badge variant="default">{lead.lead_tier}</Badge>
-                        ) : (
-                          <span className="text-sm text-[#004565]/50">—</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-[#004565] hover:text-[#004565]/80 hover:bg-[#004565]/10"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleOpenEditDialog(lead)
-                            }}
-                            title="Edit lead"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-[#00CD50] hover:text-[#00CD50]/80 hover:bg-[#00CD50]/10"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleStartSequence(lead)
-                            }}
-                            disabled={!lead.email}
-                            title={!lead.email ? 'Email required to start sequence' : 'Start email sequence'}
-                          >
-                            <Play className="h-4 w-4 mr-1" />
-                            Start
-                          </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="text-[#004565] hover:text-[#004565]/80 hover:bg-[#004565]/10"
-                          onClick={() => handleViewLead(lead)}
+                <DndContext 
+                  sensors={sensors} 
+                  collisionDetection={closestCenter} 
+                  onDragEnd={handleDragEnd}
+                >
+                  <table className="w-full">
+                    <thead className="sticky top-0 z-30 bg-[#004565]/5">
+                      <tr className="border-b bg-[#004565]/5">
+                        <SortableContext 
+                          items={columnOrder} 
+                          strategy={horizontalListSortingStrategy}
                         >
-                          View
-                          <ArrowRight className="h-4 w-4 ml-1" />
-                        </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                          {columnOrder.map((columnId) => (
+                            <SortableHeader 
+                              key={columnId} 
+                              id={columnId}
+                              onClick={() => allColumns[columnId as keyof typeof allColumns].sortable ? handleSort(columnId) : undefined}
+                            >
+                              <div className="flex items-center select-none">
+                                {allColumns[columnId as keyof typeof allColumns].label}
+                                {allColumns[columnId as keyof typeof allColumns].sortable && <SortIcon columnKey={columnId} />}
+                              </div>
+                            </SortableHeader>
+                          ))}
+                        </SortableContext>
+                        <th className="px-6 py-3 text-right text-xs font-semibold text-[#004565] uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-[#004565]/10">
+                      {sortedLeads.map((lead, index) => (
+                        <tr key={lead.id} className="hover:bg-[#004565]/5 transition-colors">
+                          {columnOrder.map((columnId) => (
+                            <td key={columnId} className="px-6 py-4 whitespace-nowrap">
+                              {renderCell(lead, columnId, index)}
+                            </td>
+                          ))}
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-[#004565] hover:text-[#004565]/80 hover:bg-[#004565]/10"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleOpenEditDialog(lead)
+                                }}
+                                title="Edit lead"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-[#00CD50] hover:text-[#00CD50]/80 hover:bg-[#00CD50]/10"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleStartSequence(lead)
+                                }}
+                                disabled={!lead.email}
+                                title={!lead.email ? 'Email required to start sequence' : 'Start email sequence'}
+                              >
+                                <Play className="h-4 w-4 mr-1" />
+                                Start
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="text-[#004565] hover:text-[#004565]/80 hover:bg-[#004565]/10"
+                                onClick={() => handleViewLead(lead)}
+                              >
+                                View
+                                <ArrowRight className="h-4 w-4 ml-1" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </DndContext>
+
               </div>
             </div>
           </CardContent>
