@@ -278,16 +278,6 @@ export default function FollowUpsPage() {
       })
     : []
   
-  // Debug: Log conversation messages to verify direction field
-  useEffect(() => {
-    if (conversationMessages && conversationMessages.length > 0) {
-      console.log('Conversation messages loaded:', conversationMessages.length)
-      console.log('Directions found:', [...new Set(conversationMessages.map((m: any) => m.direction))])
-      conversationMessages.forEach((msg: any, idx: number) => {
-        console.log(`Message ${idx}: direction="${msg.direction}", subject="${msg.subject}"`)
-      })
-    }
-  }, [conversationMessages])
 
   // Memoize the function to avoid recreating it on every render
   const getDaysSinceScheduled = useCallback((scheduledFor: string): number => {

@@ -404,15 +404,7 @@ export async function getLeadConversation(leadId: string) {
     .limit(100) // Limit to last 100 messages to prevent loading too much data
 
   if (error) {
-    console.error('Error fetching lead conversation:', error)
     throw error
-  }
-  
-  // Debug log to verify data structure
-  if (data && data.length > 0) {
-    console.log('Fetched conversation messages:', data.length)
-    console.log('Sample message:', data[0])
-    console.log('Directions found:', [...new Set(data.map((m: any) => m.direction))])
   }
   
   return (data || []) as LeadEmailConversation[]
@@ -428,7 +420,6 @@ export async function getLeadMessages(leadId: string) {
     .limit(100) // Limit to last 100 messages
 
   if (error) {
-    console.error('Error fetching lead messages:', error)
     throw error
   }
   
