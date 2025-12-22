@@ -65,7 +65,6 @@ export async function getAllDomainWarmup(filters?: DomainWarmupFilters) {
 export async function updateDomainWarmup(domain: string, updates: DomainWarmupUpdate) {
   // First try to find existing record for today
   const existing = await getDomainWarmup(domain)
-
   if (existing) {
     const { data, error } = await (supabase
       .from('domain_warmup') as any)

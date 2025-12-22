@@ -10,12 +10,55 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  horizontalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+
+// Sortable Header Component
+function SortableHeader({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id })
+  
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    cursor: 'move',
+    zIndex: transform ? 1 : 0,
+  }
+
+  return (
+    <th
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-move bg-[#004565]/5 relative group touch-none"
+    >
+      {children}
+    </th>
+  )
+}
 
 type FollowupStatus = 'pending' | 'sent' | 'cancelled' | 'skipped'
 
 // Component for each follow-up row
 function FollowUpRow({ 
-  item, 
+  item,
+  index,
+  columnOrder, 
   daysSince, 
   isAutoReplyEnabled, 
   autoSendEnabled,
@@ -28,6 +71,8 @@ function FollowUpRow({
   getStatusBadge,
 }: {
   item: any
+  index: number
+  columnOrder: string[]
   daysSince: number
   isAutoReplyEnabled: boolean
   autoSendEnabled: boolean
@@ -61,26 +106,29 @@ function FollowUpRow({
   // 2. There's a pending response
   // 3. Auto-send (without manual review) is OFF
   const canRespond = item.responded && hasPendingResponse && !autoSendEnabled
-  
-  return (
-    <tr className={`border-b hover:bg-[#004565]/5 ${showNotification ? 'bg-yellow-50' : ''}`}>
-      <td className="px-6 py-4">
-        <div>
-          <div className="font-medium text-[#004565] flex items-center gap-2">
-            <User className="h-4 w-4" />
-            {item.lead?.name || item.lead?.email || 'Unknown'}
-          </div>
-          <div className="text-sm text-[#004565]/70">{item.lead?.email || '—'}</div>
-          {item.lead?.company_name && (
-            <div className="text-xs text-[#004565]/60 flex items-center gap-1 mt-1">
-              <Building2 className="h-3 w-3" />
-              {item.lead.company_name}
+
+  const renderCell = (columnId: string) => {
+    switch (columnId) {
+      case 'hash':
+        return <div className="text-sm text-[#004565]/70 font-mono">{index + 1}</div>
+      case 'lead':
+        return (
+          <div>
+            <div className="font-medium text-[#004565] flex items-center gap-2">
+              <User className="h-4 w-4" />
+              {item.lead?.name || item.lead?.email || 'Unknown'}
             </div>
-          )}
-        </div>
-      </td>
-      <td className="px-6 py-4">
-        {item.sequence?.name ? (
+            <div className="text-sm text-[#004565]/70">{item.lead?.email || '—'}</div>
+            {item.lead?.company_name && (
+              <div className="text-xs text-[#004565]/60 flex items-center gap-1 mt-1">
+                <Building2 className="h-3 w-3" />
+                {item.lead.company_name}
+              </div>
+            )}
+          </div>
+        )
+      case 'sequence':
+        return item.sequence?.name ? (
           <div>
             <div className="font-medium text-[#004565]">{item.sequence.name}</div>
             {item.campaign && (
@@ -89,21 +137,19 @@ function FollowUpRow({
           </div>
         ) : (
           <span className="text-[#004565]/50">No sequence</span>
-        )}
-      </td>
-      <td className="px-6 py-4">
-        <div className="font-medium text-[#004565]">#{item.followup_number}</div>
-      </td>
-      <td className="px-6 py-4">
-        <div className="text-sm font-medium text-[#004565]">
-          {daysSince === 0 ? 'Today' : `${daysSince} day${daysSince !== 1 ? 's' : ''}`}
-        </div>
-      </td>
-      <td className="px-6 py-4">
-        {getStatusBadge(item.status)}
-      </td>
-      <td className="px-6 py-4 text-center">
-        {item.responded ? (
+        )
+      case 'followup_number':
+        return <div className="font-medium text-[#004565]">#{item.followup_number}</div>
+      case 'days':
+        return (
+          <div className="text-sm font-medium text-[#004565]">
+            {daysSince === 0 ? 'Today' : `${daysSince} day${daysSince !== 1 ? 's' : ''}`}
+          </div>
+        )
+      case 'status':
+        return getStatusBadge(item.status)
+      case 'followup_action':
+        return item.responded ? (
           <div className="flex items-center justify-center gap-2">
             {hasPendingResponse && !autoSendEnabled && (
               <Badge className="bg-yellow-500 text-white animate-pulse">
@@ -139,20 +185,35 @@ function FollowUpRow({
             <Mail className="h-4 w-4 mr-1" />
             Follow-up
           </Button>
-        )}
-      </td>
-      <td className="px-6 py-4 text-right">
-        <div className="flex items-center justify-end gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onViewDetails(item)}
-            className="border-[#004565]/30 text-[#004565]"
-          >
-            View
-          </Button>
-        </div>
-      </td>
+        )
+      case 'actions':
+        return (
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onViewDetails(item)}
+              className="border-[#004565]/30 text-[#004565]"
+            >
+              View
+            </Button>
+          </div>
+        )
+      default:
+        return null
+    }
+  }
+  
+  return (
+    <tr className={`border-b hover:bg-[#004565]/5 ${showNotification ? 'bg-yellow-50' : ''}`}>
+      {columnOrder.map(columnId => (
+        <td 
+          key={columnId} 
+          className={`px-6 py-4 ${columnId === 'followup_action' ? 'text-center' : columnId === 'actions' ? 'text-right' : ''}`}
+        >
+          {renderCell(columnId)}
+        </td>
+      ))}
     </tr>
   )
 }
@@ -175,6 +236,52 @@ export default function FollowUpsPage() {
   const [userChanges, setUserChanges] = useState<string>('')
   const [notificationQueue, setNotificationQueue] = useState<Set<string>>(new Set())
   const updatePendingResponse = useUpdatePendingResponse()
+
+  // Column definitions
+  const allColumns = {
+    hash: { label: '#' },
+    lead: { label: 'Lead' },
+    sequence: { label: 'Sequence' },
+    followup_number: { label: 'Follow-up #' },
+    days: { label: 'Days' },
+    status: { label: 'Status' },
+    followup_action: { label: 'Follow-up' },
+    actions: { label: 'Actions' },
+  }
+
+  const [columnOrder, setColumnOrder] = useState<string[]>([
+    'hash',
+    'lead',
+    'sequence',
+    'followup_number',
+    'days',
+    'status',
+    'followup_action',
+    'actions'
+  ])
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (over && active.id !== over.id) {
+      setColumnOrder((items) => {
+        const oldIndex = items.indexOf(active.id as string)
+        const newIndex = items.indexOf(over.id as string)
+        return arrayMove(items, oldIndex, newIndex)
+      })
+    }
+  }
 
   // Request notification permission on mount
   useEffect(() => {
@@ -574,56 +681,64 @@ export default function FollowUpsPage() {
       <Card className="border-[#004565]/20 shadow-lg">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b bg-[#004565]/5">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Lead</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Sequence</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Follow-up #</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Days</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Status</th>
-                  <th className="px-6 py-3 text-center text-xs font-semibold text-[#004565] uppercase">Follow-up</th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold text-[#004565] uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredFollowups.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center">
-                      <Clock className="h-12 w-12 mx-auto text-[#004565]/50 mb-4" />
-                      <p className="text-[#004565] font-medium mb-2">No follow-ups found</p>
-                      <p className="text-sm text-[#004565]/70">
-                        {searchTerm || filterStatus !== 'all'
-                          ? 'Try adjusting your filters'
-                          : 'Scheduled follow-ups will appear here'}
-                      </p>
-                    </td>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b bg-[#004565]/5">
+                    <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
+                      {columnOrder.map((columnId) => (
+                        <SortableHeader key={columnId} id={columnId}>
+                          {allColumns[columnId as keyof typeof allColumns].label}
+                        </SortableHeader>
+                      ))}
+                    </SortableContext>
                   </tr>
-                ) : (
-                  filteredFollowups.map((item) => {
-                    const daysSince = getDaysSinceScheduled(item.scheduled_for)
-                    // Find pending response for this lead from the single query
-                    const pendingResponse = allPendingResponses?.find((r: any) => r.lead_id === item.lead_id) || null
-                    return (
-                      <FollowUpRow
-                        key={item.id}
-                        item={item}
-                        daysSince={daysSince}
-                        isAutoReplyEnabled={isAutoReplyEnabled}
-                        autoSendEnabled={autoSendEnabled}
-                        pendingResponse={pendingResponse}
-                        notificationQueue={notificationQueue}
-                        setNotificationQueue={setNotificationQueue}
-                        onViewDetails={handleViewDetails}
-                        onRespond={handleRespond}
-                        onFollowUp={handleFollowUp}
-                        getStatusBadge={getStatusBadge}
-                      />
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredFollowups.length === 0 ? (
+                    <tr>
+                      <td colSpan={columnOrder.length} className="px-6 py-12 text-center">
+                        <Clock className="h-12 w-12 mx-auto text-[#004565]/50 mb-4" />
+                        <p className="text-[#004565] font-medium mb-2">No follow-ups found</p>
+                        <p className="text-sm text-[#004565]/70">
+                          {searchTerm || filterStatus !== 'all'
+                            ? 'Try adjusting your filters'
+                            : 'Scheduled follow-ups will appear here'}
+                        </p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredFollowups.map((item, index) => {
+                      const daysSince = getDaysSinceScheduled(item.scheduled_for)
+                      // Find pending response for this lead from the single query
+                      const pendingResponse = allPendingResponses?.find((r: any) => r.lead_id === item.lead_id) || null
+                      return (
+                        <FollowUpRow
+                          key={item.id}
+                          item={item}
+                          index={index}
+                          columnOrder={columnOrder}
+                          daysSince={daysSince}
+                          isAutoReplyEnabled={isAutoReplyEnabled}
+                          autoSendEnabled={autoSendEnabled}
+                          pendingResponse={pendingResponse}
+                          notificationQueue={notificationQueue}
+                          setNotificationQueue={setNotificationQueue}
+                          onViewDetails={handleViewDetails}
+                          onRespond={handleRespond}
+                          onFollowUp={handleFollowUp}
+                          getStatusBadge={getStatusBadge}
+                        />
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </DndContext>
           </div>
         </CardContent>
       </Card>
