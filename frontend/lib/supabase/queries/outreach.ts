@@ -65,7 +65,7 @@ export async function getAllDomainWarmup(filters?: DomainWarmupFilters) {
 export async function updateDomainWarmup(domain: string, updates: DomainWarmupUpdate) {
   // First try to find existing record for today
   const existing = await getDomainWarmup(domain)
-  
+
   if (existing) {
     const { data, error } = await (supabase
       .from('domain_warmup') as any)
@@ -279,8 +279,8 @@ export async function getRespondedLeads() {
   const leadsWithStats = await Promise.all(
     leads.map(async (lead) => {
       // Find active campaign for this lead
-      const campaign: CampaignWithSequence | null = campaigns.find((c) => 
-        c.lead_id === lead.id && 
+      const campaign: CampaignWithSequence | null = campaigns.find((c) =>
+        c.lead_id === lead.id &&
         (c.status === 'active' || c.status === 'paused' || c.status === 'pending')
       ) || campaigns.find((c) => c.lead_id === lead.id) || null
 
@@ -342,8 +342,8 @@ export async function getRespondedLeads() {
         sequence_name: campaign?.email_sequences && !Array.isArray(campaign.email_sequences)
           ? (campaign.email_sequences as { name: string }).name
           : Array.isArray(campaign?.email_sequences) && campaign.email_sequences.length > 0
-          ? campaign.email_sequences[0].name
-          : null,
+            ? campaign.email_sequences[0].name
+            : null,
         campaign_status: campaign?.status || 'unknown',
         current_step: campaign?.current_step || 0,
         total_emails_sent: totalEmailsSent || 0,
@@ -396,34 +396,79 @@ export interface LeadEmailConversation {
 }
 
 export async function getLeadConversation(leadId: string) {
+  // Fallback to interactions table since lead_email_conversations view might be missing
   const { data, error } = await supabase
-    .from('lead_email_conversations')
-    .select('id, lead_id, campaign_id, sequence_step, direction, subject, body, from_email, to_email, cc_email, status, sent_at, delivered_at, opened_at, replied_at, message_id, in_reply_to, thread_id, created_at')
+    .from('interactions')
+    .select('id, lead_id, campaign_id, sequence_step, direction, subject, content, created_at, email_message_id')
     .eq('lead_id', leadId)
+    .eq('interaction_type', 'email')
     .order('created_at', { ascending: true })
-    .limit(100) // Limit to last 100 messages to prevent loading too much data
+    .limit(100)
 
   if (error) {
     throw error
   }
-  
-  return (data || []) as LeadEmailConversation[]
+
+  // Map to LeadEmailConversation format
+  return (data || []).map((item: any) => ({
+    id: item.id,
+    lead_id: item.lead_id,
+    campaign_id: item.campaign_id,
+    sequence_step: item.sequence_step,
+    direction: item.direction,
+    subject: item.subject,
+    body: item.content,
+    from_email: null,
+    to_email: null,
+    cc_email: [],
+    status: item.direction === 'outbound' ? 'sent' : 'replied',
+    sent_at: item.created_at,
+    delivered_at: null,
+    opened_at: null,
+    replied_at: null,
+    message_id: item.email_message_id,
+    in_reply_to: null,
+    thread_id: null,
+    created_at: item.created_at
+  })) as LeadEmailConversation[]
 }
 
-// Legacy function - kept for backwards compatibility but now uses lead_email_conversations
+// Legacy function - kept for backwards compatibility but now uses interactions
 export async function getLeadMessages(leadId: string) {
   const { data, error } = await supabase
-    .from('lead_email_conversations')
-    .select('id, lead_id, campaign_id, sequence_step, direction, subject, body, from_email, to_email, cc_email, status, sent_at, delivered_at, opened_at, replied_at, message_id, in_reply_to, thread_id, created_at')
+    .from('interactions')
+    .select('id, lead_id, campaign_id, sequence_step, direction, subject, content, created_at, email_message_id')
     .eq('lead_id', leadId)
+    .eq('interaction_type', 'email')
     .order('created_at', { ascending: false })
-    .limit(100) // Limit to last 100 messages
+    .limit(100)
 
   if (error) {
     throw error
   }
-  
-  return (data || []) as LeadEmailConversation[]
+
+  // Map to LeadEmailConversation format
+  return (data || []).map((item: any) => ({
+    id: item.id,
+    lead_id: item.lead_id,
+    campaign_id: item.campaign_id,
+    sequence_step: item.sequence_step,
+    direction: item.direction,
+    subject: item.subject,
+    body: item.content,
+    from_email: null,
+    to_email: null,
+    cc_email: [],
+    status: item.direction === 'outbound' ? 'sent' : 'replied',
+    sent_at: item.created_at,
+    delivered_at: null,
+    opened_at: null,
+    replied_at: null,
+    message_id: item.email_message_id,
+    in_reply_to: null,
+    thread_id: null,
+    created_at: item.created_at
+  })) as LeadEmailConversation[]
 }
 
 // ============================================================================
@@ -494,7 +539,7 @@ export async function getFollowupQueue(filters?: { status?: string }) {
   const transformed = (data || []).map((item: any) => {
     const lead = Array.isArray(item.leads) ? item.leads[0] : item.leads
     const campaign = Array.isArray(item.email_campaigns) ? item.email_campaigns[0] : item.email_campaigns
-    const sequence = campaign?.email_sequences 
+    const sequence = campaign?.email_sequences
       ? (Array.isArray(campaign.email_sequences) ? campaign.email_sequences[0] : campaign.email_sequences)
       : null
 
@@ -576,7 +621,7 @@ export async function getOutreachMetrics(filters?: MetricsFilters): Promise<Outr
 
   const messages = (data || []) as EmailMessage[]
   const total_sent = messages.filter(m => m.status !== 'queued' && m.status !== 'failed').length
-  const total_delivered = messages.filter(m => 
+  const total_delivered = messages.filter(m =>
     ['delivered', 'opened', 'replied'].includes(m.status)
   ).length
   const total_opened = messages.filter(m => m.status === 'opened' || m.status === 'replied').length
@@ -616,7 +661,7 @@ export interface TimelineStep {
 
 export async function getSequenceTimeline(campaignId: string): Promise<TimelineStep[]> {
   const messages = await getCampaignMessages(campaignId)
-  
+
   return messages.map(msg => ({
     sequence_step: msg.sequence_step,
     scheduled_date: msg.created_at,
@@ -1268,7 +1313,7 @@ export async function getPendingResponses(leadId?: string, status?: string): Pro
   const { data, error } = await query
 
   if (error) throw error
-  
+
   // Transform the data to handle Supabase relation format
   const transformed = (data || []).map((item: any) => {
     const lead = Array.isArray(item.leads) ? item.leads[0] : item.leads
@@ -1277,7 +1322,7 @@ export async function getPendingResponses(leadId?: string, status?: string): Pro
       leads: lead || null,
     }
   })
-  
+
   return transformed as PendingResponse[]
 }
 
@@ -1322,12 +1367,12 @@ export async function createPendingResponse(response: Omit<PendingResponse, 'id'
 
 export async function updatePendingResponse(id: string, updates: Partial<PendingResponse>): Promise<PendingResponse> {
   const updateData: any = { ...updates }
-  
+
   // Set reviewed_at when status changes to approved or rejected
   if (updates.status === 'approved' || updates.status === 'rejected') {
     updateData.reviewed_at = new Date().toISOString()
   }
-  
+
   // Set sent_at when status changes to sent
   if (updates.status === 'sent') {
     updateData.sent_at = new Date().toISOString()
