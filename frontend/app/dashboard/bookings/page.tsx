@@ -108,35 +108,35 @@ export default function BookingsPage() {
           <h1 className="text-4xl font-bold text-[#004565]">Bookings</h1>
           <p className="text-[#004565]/80 mt-2 font-medium">View and manage all calendar bookings</p>
         </div>
+        <div className="flex gap-4">
+          <Card className="border-[#004565]/20 w-32">
+            <CardContent className="p-3 text-center">
+              <div className="text-xl font-bold text-[#004565]">{stats.total}</div>
+              <div className="text-xs text-[#004565]/70">Total</div>
+            </CardContent>
+          </Card>
+          <Card className="border-green-200 bg-green-50 w-32">
+            <CardContent className="p-3 text-center">
+              <div className="text-xl font-bold text-green-600">{stats.confirmed}</div>
+              <div className="text-xs text-green-700">Confirmed</div>
+            </CardContent>
+          </Card>
+          <Card className="border-yellow-200 bg-yellow-50 w-32">
+            <CardContent className="p-3 text-center">
+              <div className="text-xl font-bold text-yellow-600">{stats.pending}</div>
+              <div className="text-xs text-yellow-700">Pending</div>
+            </CardContent>
+          </Card>
+          <Card className="border-red-200 bg-red-50 w-32">
+            <CardContent className="p-3 text-center">
+              <div className="text-xl font-bold text-red-600">{stats.cancelled}</div>
+              <div className="text-xs text-red-700">Cancelled</div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="border-[#004565]/20">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-[#004565]">{stats.total}</div>
-            <div className="text-sm text-[#004565]/70">Total Bookings</div>
-          </CardContent>
-        </Card>
-        <Card className="border-green-200 bg-green-50">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">{stats.confirmed}</div>
-            <div className="text-sm text-green-700">Confirmed</div>
-          </CardContent>
-        </Card>
-        <Card className="border-yellow-200 bg-yellow-50">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
-            <div className="text-sm text-yellow-700">Pending</div>
-          </CardContent>
-        </Card>
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-red-600">{stats.cancelled}</div>
-            <div className="text-sm text-red-700">Cancelled</div>
-          </CardContent>
-        </Card>
-      </div>
+
 
       {/* Calendar */}
       <Card className="border-[#004565]/20 shadow-lg">

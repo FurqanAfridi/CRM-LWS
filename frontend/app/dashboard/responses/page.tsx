@@ -386,7 +386,7 @@ export default function ResponsesPage() {
               </div>
               <div className="flex-1">
                 <h3 className="text-sm font-semibold text-blue-900 mb-1">AI Auto-Responder is Enabled</h3>
-                <p className="text-xs text-blue-800">
+                <p className="text-xs text-blue-800 ">
                   The AI auto-responder is currently handling responses automatically. Manual replies are disabled to prevent conflicts. 
                   You can manage the AI responder settings in the <strong>Pipeline</strong> page.
                 </p>
