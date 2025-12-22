@@ -1,21 +1,50 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useCompanies } from '@/lib/hooks/useCompanies'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import Link from 'next/link'
-import { Building2, Plus, MapPin, Users, DollarSign, Globe, Linkedin, Facebook, Twitter, FileText } from 'lucide-react'
+import { Building2, Plus, MapPin, Users, DollarSign, Globe, Linkedin, Facebook, Twitter, FileText, Loader2 } from 'lucide-react'
 import { Database } from '@/lib/supabase/types'
 
 type Company = Database['public']['Tables']['companies']['Row']
 
 export default function CompaniesPage() {
-  const { data: companies, isLoading, error } = useCompanies()
+  const { 
+    data, 
+    fetchNextPage, 
+    hasNextPage, 
+    isFetchingNextPage, 
+    isLoading, 
+    error 
+  } = useCompanies()
+  
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const scrollTriggerRef = useRef<HTMLDivElement>(null)
+  const bottomSentinelRef = useRef<HTMLDivElement>(null)
+
+  // Flatten pages into a single array
+  const companies = data?.pages.flat() || []
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some(entry => entry.isIntersecting) && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage()
+        }
+      },
+      { threshold: 0.1 }
+    )
+
+    if (scrollTriggerRef.current) observer.observe(scrollTriggerRef.current)
+    if (bottomSentinelRef.current) observer.observe(bottomSentinelRef.current)
+
+    return () => observer.disconnect()
+  }, [hasNextPage, fetchNextPage, isFetchingNextPage, companies.length])
 
   const handleViewDetails = (company: Company) => {
     setSelectedCompany(company)
@@ -61,6 +90,9 @@ export default function CompaniesPage() {
         <div className="relative">
           <h1 className="text-4xl font-bold text-[#004565]">
             Companies
+            <span className="ml-2 text-2xl text-[#004565]/60 font-medium">
+              ({companies.length})
+            </span>
           </h1>
           <p className="text-[#004565]/80 mt-2 font-medium">Manage your company accounts</p>
           <div className="absolute -top-2 -left-2 w-24 h-24 bg-[#376EE1]/20 rounded-full blur-2xl -z-10"></div>
@@ -74,50 +106,79 @@ export default function CompaniesPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {companies?.map((company) => (
-          <Card key={company.id} className="border-[#004565]/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 bg-white/90 backdrop-blur-sm">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Building2 className="h-5 w-5" />
-                  {company.name}
-                </CardTitle>
-                {company.icp_qualified && (
-                  <Badge variant="success">ICP Qualified</Badge>
-                )}
-              </div>
-              <CardDescription>
-                {company.industry_type} • {company.location_count || 0} locations
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">ICP Score:</span>
-                  <span className="font-medium">{company.icp_score}/100</span>
+        {companies.map((company, index) => {
+          // Trigger fetch when user sees the 10th item from the end
+          const isTriggerItem = index === companies.length - 10
+          
+          return (
+            <div 
+              key={company.id}
+              ref={isTriggerItem ? scrollTriggerRef : null}
+              className="contents" // Use contents to avoid breaking grid layout, but attach ref to div wrapper if needed, or attach to Card
+            >
+             <Card 
+               className="border-[#004565]/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 bg-white/90 backdrop-blur-sm"
+             >
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5" />
+                    {company.name}
+                  </CardTitle>
+                  {company.icp_qualified && (
+                    <Badge variant="success">ICP Qualified</Badge>
+                  )}
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Employees:</span>
-                  <span className="font-medium">{company.employee_count?.toLocaleString() || 'N/A'}</span>
+                <CardDescription>
+                  {company.industry_type} • {company.location_count || 0} locations
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">ICP Score:</span>
+                    <span className="font-medium">{company.icp_score}/100</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Employees:</span>
+                    <span className="font-medium">{company.employee_count?.toLocaleString() || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Revenue:</span>
+                    <span className="font-medium">{company.revenue_range || 'N/A'}</span>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    className="w-full mt-4"
+                    onClick={() => handleViewDetails(company)}
+                  >
+                    View Details
+                  </Button>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Revenue:</span>
-                  <span className="font-medium">{company.revenue_range || 'N/A'}</span>
-                </div>
-                <Button 
-                  variant="outline" 
-                  className="w-full mt-4"
-                  onClick={() => handleViewDetails(company)}
-                >
-                  View Details
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+            </div>
+          )
+        })}
       </div>
 
-      {companies?.length === 0 && (
+      {/* Loading sentinel */}
+      {/* Loading sentinel / Footer */}
+      <div ref={bottomSentinelRef} className="py-4 flex justify-center w-full">
+        {isFetchingNextPage && (
+          <div className="flex items-center gap-2 text-[#004565]/60">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <span className="text-sm font-medium">Loading more companies...</span>
+          </div>
+        )}
+        {!hasNextPage && companies.length > 0 && (
+          <p className="text-[#004565]/50 text-sm font-medium italic">
+            No more companies to load
+          </p>
+        )}
+      </div>
+
+      {companies.length === 0 && !isLoading && (
         <Card className="border-[#004565]/20 shadow-lg bg-white/90 backdrop-blur-sm">
           <CardContent className="py-12 text-center">
             <div className="h-16 w-16 mx-auto mb-4 rounded-full bg-[#004565]/10 flex items-center justify-center">

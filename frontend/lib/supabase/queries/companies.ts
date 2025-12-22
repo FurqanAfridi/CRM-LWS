@@ -11,14 +11,20 @@ export interface CompanyFilters {
   icp_qualified?: boolean
   location_count_min?: number
   location_count_max?: number
+  offset?: number
+  limit?: number
 }
 
 export async function getCompanies(filters?: CompanyFilters) {
+  const limit = filters?.limit || 50
+  const from = filters?.offset || 0
+  const to = from + limit - 1
+
   let query = supabase
     .from('companies')
     .select('*')
     .order('created_at', { ascending: false })
-    .limit(1000) // Add reasonable limit to prevent fetching too many records
+    .range(from, to)
 
   if (filters?.industry_type) {
     query = query.eq('industry_type', filters.industry_type)
@@ -87,10 +93,10 @@ export async function updateCompany(id: string, updates: CompanyUpdate) {
   const companyData = data as Company
 
   // Recalculate ICP score if relevant fields changed
-  if (companyData && (updates.location_count !== undefined || 
-               updates.employee_count !== undefined || 
-               updates.revenue_range !== undefined ||
-               updates.industry_type !== undefined)) {
+  if (companyData && (updates.location_count !== undefined ||
+    updates.employee_count !== undefined ||
+    updates.revenue_range !== undefined ||
+    updates.industry_type !== undefined)) {
     const score = calculateICPScore(companyData)
     await (supabase
       .from('companies') as any)
@@ -117,7 +123,7 @@ export async function deleteCompany(id: string) {
 export async function calculateCompanyICPScore(companyId: string) {
   const company = await getCompanyById(companyId)
   const score = calculateICPScore(company)
-  
+
   await updateCompany(companyId, {
     icp_score: score.totalScore,
     icp_qualified: score.isQualified,
