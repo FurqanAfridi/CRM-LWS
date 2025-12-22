@@ -456,7 +456,32 @@ export default function FollowUpsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-bold text-[#004565]">Follow-ups</h1>
-          <p className="text-[#004565]/80 mt-2 font-medium">Manage responses and continue sequences</p>
+        </div>
+        <div className="flex gap-4">
+          <Card className="border-yellow-200 w-32">
+            <CardContent className="p-3 text-center">
+              <div className="text-xl font-bold text-yellow-600">{pendingCount}</div>
+              <div className="text-xs text-yellow-600/70">Pending</div>
+            </CardContent>
+          </Card>
+          <Card className="border-green-200 w-32">
+            <CardContent className="p-3 text-center">
+              <div className="text-xl font-bold text-green-600">{sentCount}</div>
+              <div className="text-xs text-green-600/70">Sent</div>
+            </CardContent>
+          </Card>
+          <Card className="border-red-200 w-32">
+            <CardContent className="p-3 text-center">
+              <div className="text-xl font-bold text-red-600">{cancelledCount}</div>
+              <div className="text-xs text-red-600/70">Cancelled</div>
+            </CardContent>
+          </Card>
+          <Card className="border-gray-200 w-32">
+            <CardContent className="p-3 text-center">
+              <div className="text-xl font-bold text-gray-600">{skippedCount}</div>
+              <div className="text-xs text-gray-600/70">Skipped</div>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
@@ -488,33 +513,8 @@ export default function FollowUpsPage() {
         </Card>
       )}
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-4 gap-4">
-        <Card className="border-yellow-200">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-yellow-600">{pendingCount}</div>
-            <div className="text-sm text-yellow-600/70">Pending</div>
-          </CardContent>
-        </Card>
-        <Card className="border-green-200">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">{sentCount}</div>
-            <div className="text-sm text-green-600/70">Sent</div>
-          </CardContent>
-        </Card>
-        <Card className="border-red-200">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-red-600">{cancelledCount}</div>
-            <div className="text-sm text-red-600/70">Cancelled</div>
-          </CardContent>
-        </Card>
-        <Card className="border-gray-200">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-gray-600">{skippedCount}</div>
-            <div className="text-sm text-gray-600/70">Skipped</div>
-          </CardContent>
-        </Card>
-      </div>
+
+
 
       {/* Filters */}
       <Card className="border-[#004565]/20">
