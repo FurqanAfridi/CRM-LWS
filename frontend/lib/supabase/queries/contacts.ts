@@ -13,7 +13,7 @@ export interface ContactFilters {
 export async function getContacts(filters?: ContactFilters) {
   let query = supabase
     .from('contacts')
-    .select('id, first_name, last_name, email, phone, job_title, department, company_id, company_name, is_decision_maker, created_at, updated_at')
+    .select('*, companies(name)')
     .order('created_at', { ascending: false })
     .limit(1000)
 
@@ -26,24 +26,37 @@ export async function getContacts(filters?: ContactFilters) {
 
   const { data, error } = await query
   if (error) throw error
-  return data as Contact[]
+
+  // Transform data to include company_name flattened
+  return (data || []).map((contact: any) => ({
+    ...contact,
+    company_name: contact.companies?.name || null
+  })) as (Contact & { company_name?: string | null })[]
 }
 
 export async function getContactById(id: string) {
   const { data, error } = await supabase
     .from('contacts')
-    .select('*')
+    .select('*, companies(name)')
     .eq('id', id)
     .single()
-  
+
   if (error) throw error
-  return data as Contact
+
+  const contact = data as any
+  return {
+    ...contact,
+    company_name: contact.companies?.name || null
+  } as Contact & { company_name?: string | null }
 }
 
-export async function createContact(contact: ContactInsert) {
+export async function createContact(contact: ContactInsert & { company_name?: string | null }) {
+  // Remove company_name from payload as it's not a column in contacts table
+  const { company_name, ...dbContact } = contact
+
   const { data, error } = await (supabase
     .from('contacts') as any)
-    .insert(contact)
+    .insert(dbContact)
     .select()
     .single()
 
@@ -51,10 +64,13 @@ export async function createContact(contact: ContactInsert) {
   return data as Contact
 }
 
-export async function updateContact(id: string, updates: ContactUpdate) {
+export async function updateContact(id: string, updates: ContactUpdate & { company_name?: string | null }) {
+  // Remove company_name from payload
+  const { company_name, ...dbUpdates } = updates
+
   const { data, error } = await (supabase
     .from('contacts') as any)
-    .update(updates)
+    .update(dbUpdates)
     .eq('id', id)
     .select()
     .single()

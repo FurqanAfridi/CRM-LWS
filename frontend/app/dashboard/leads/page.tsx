@@ -35,7 +35,7 @@ import { CSS } from '@dnd-kit/utilities'
 // Sortable Header Component
 function SortableHeader({ id, children, onClick }: { id: string; children: React.ReactNode; onClick?: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id })
-  
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -80,7 +80,7 @@ export default function LeadsPage() {
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [verifyError, setVerifyError] = useState<string | null>(null)
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
-  
+
   // Form state
   const [formData, setFormData] = useState<Partial<LeadInsert>>({
     name: '',
@@ -117,17 +117,17 @@ export default function LeadsPage() {
 
   const [columnOrder, setColumnOrder] = useState<string[]>([
     'hash',
-    'name', 
-    'company_name', 
-    'title', 
-    'email', 
-    'email_verification', 
-    'source', 
-    'status', 
-    'qualification_status', 
-    'icp_score', 
-    'estimated_value', 
-    'probability', 
+    'name',
+    'company_name',
+    'title',
+    'email',
+    'email_verification',
+    'source',
+    'status',
+    'qualification_status',
+    'icp_score',
+    'estimated_value',
+    'probability',
     'lead_tier'
   ])
 
@@ -439,7 +439,7 @@ export default function LeadsPage() {
   const handleFetchLeads = async () => {
     setIsFetching(true)
     setFetchError(null)
-    
+
     try {
       // Trigger webhook
       const response = await fetch('https://auto.lincolnwaste.co/webhook/fetch', {
@@ -476,7 +476,7 @@ export default function LeadsPage() {
 
       // Success - refresh leads data
       queryClient.invalidateQueries({ queryKey: ['leads'] })
-      
+
       // Show success message briefly
       setFetchError(null)
     } catch (error: any) {
@@ -506,7 +506,7 @@ export default function LeadsPage() {
   const handleVerifyLeads = async () => {
     setIsVerifying(true)
     setVerifyError(null)
-    
+
     try {
       // Trigger verify webhook
       const response = await fetch('https://auto.lincolnwaste.co/webhook/DNSResolve', {
@@ -543,7 +543,7 @@ export default function LeadsPage() {
 
       // Success - refresh leads data to show updated verification status
       queryClient.invalidateQueries({ queryKey: ['leads'] })
-      
+
       // Clear error on success
       setVerifyError(null)
     } catch (error: any) {
@@ -577,7 +577,7 @@ export default function LeadsPage() {
             <Plus className="h-4 w-4 mr-2" />
             Add Lead
           </Button>
-          <Button 
+          <Button
             onClick={handleRefreshLeads}
             disabled={isRefreshing || isLoading}
             variant="outline"
@@ -595,7 +595,7 @@ export default function LeadsPage() {
               </>
             )}
           </Button>
-          <Button 
+          <Button
             onClick={handleVerifyLeads}
             disabled={isVerifying || isLoading}
             className="bg-[#00CD50] hover:bg-[#00CD50]/90 text-white shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50"
@@ -612,7 +612,7 @@ export default function LeadsPage() {
               </>
             )}
           </Button>
-          <Button 
+          <Button
             onClick={handleFetchLeads}
             disabled={isFetching}
             className="bg-[#004565] hover:bg-[#004565]/90 text-white shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50"
@@ -685,21 +685,21 @@ export default function LeadsPage() {
           <CardContent className="p-0">
             <div className="flex flex-col h-[calc(100vh-280px)]">
               <div className="overflow-x-scroll overflow-y-auto flex-1">
-                <DndContext 
-                  sensors={sensors} 
-                  collisionDetection={closestCenter} 
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
                   onDragEnd={handleDragEnd}
                 >
                   <table className="w-full">
                     <thead className="sticky top-0 z-30 bg-[#004565]/5">
                       <tr className="border-b bg-[#004565]/5">
-                        <SortableContext 
-                          items={columnOrder} 
+                        <SortableContext
+                          items={columnOrder}
                           strategy={horizontalListSortingStrategy}
                         >
                           {columnOrder.map((columnId) => (
-                            <SortableHeader 
-                              key={columnId} 
+                            <SortableHeader
+                              key={columnId}
                               id={columnId}
                               onClick={() => allColumns[columnId as keyof typeof allColumns].sortable ? handleSort(columnId) : undefined}
                             >
@@ -751,9 +751,9 @@ export default function LeadsPage() {
                                 <Play className="h-4 w-4 mr-1" />
                                 Start
                               </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 className="text-[#004565] hover:text-[#004565]/80 hover:bg-[#004565]/10"
                                 onClick={() => handleViewLead(lead)}
                               >

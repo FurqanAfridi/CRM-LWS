@@ -11,10 +11,52 @@ import { Label } from '@/components/ui/label'
 import { useQueryClient } from '@tanstack/react-query'
 import { Database } from '@/lib/supabase/types'
 import { Users, Plus, Mail, Phone, Building2, ArrowRight, Edit, ArrowUp, ArrowDown } from 'lucide-react'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  horizontalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 type Contact = Database['public']['Tables']['contacts']['Row']
 type ContactInsert = Database['public']['Tables']['contacts']['Insert']
 type ContactUpdate = Database['public']['Tables']['contacts']['Update']
+
+// Sortable Header Component
+function SortableHeader({ id, children, onClick }: { id: string; children: React.ReactNode; onClick?: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    cursor: 'move',
+    zIndex: transform ? 1 : 0,
+  }
+
+  return (
+    <th
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-move bg-[#004565]/5 relative group touch-none select-none"
+      onClick={onClick}
+    >
+      {children}
+    </th>
+  )
+}
 
 export default function ContactsPage() {
   const { data: contacts, isLoading, error } = useContacts()
@@ -25,7 +67,7 @@ export default function ContactsPage() {
   const [isFormDialogOpen, setIsFormDialogOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
-  
+
   // Form state
   const [formData, setFormData] = useState<Partial<ContactInsert & { company_name?: string | null }>>({
     first_name: '',
@@ -37,6 +79,52 @@ export default function ContactsPage() {
     company_name: '',
     is_decision_maker: false,
   })
+
+  // Column definitions
+  const allColumns = {
+    hash: { label: '#' },
+    first_name: { label: 'Name' },
+    job_title: { label: 'Job Title' },
+    email: { label: 'Email' },
+    phone: { label: 'Phone' },
+    company_name: { label: 'Company' },
+    is_decision_maker: { label: 'Status' },
+    actions: { label: 'Actions' },
+  }
+
+  const [columnOrder, setColumnOrder] = useState<string[]>([
+    'hash',
+    'first_name',
+    'job_title',
+    'email',
+    'phone',
+    'company_name',
+    'is_decision_maker',
+    'actions'
+  ])
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (over && active.id !== over.id) {
+      setColumnOrder((items) => {
+        const oldIndex = items.indexOf(active.id as string)
+        const newIndex = items.indexOf(over.id as string)
+        return arrayMove(items, oldIndex, newIndex)
+      })
+    }
+  }
 
   const handleSort = (key: string) => {
     setSortConfig((current) => {
@@ -133,6 +221,91 @@ export default function ContactsPage() {
     }
   }
 
+  const renderCell = (contact: Contact, columnId: string, index: number) => {
+    switch (columnId) {
+      case 'hash':
+        return <span className="text-sm text-[#004565]/70 font-mono">{index + 1}</span>
+      case 'first_name':
+        return (
+          <div className="flex items-center">
+            <div className="flex-shrink-0 h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center">
+              <Users className="h-5 w-5 text-gray-600" />
+            </div>
+            <div className="ml-4">
+              <div className="text-sm font-medium text-gray-900">
+                {contact.first_name || contact.last_name
+                  ? `${contact.first_name || ''} ${contact.last_name || ''}`.trim()
+                  : 'Unnamed Contact'}
+              </div>
+              {contact.department && (
+                <div className="text-sm text-gray-500">{contact.department}</div>
+              )}
+            </div>
+          </div>
+        )
+      case 'job_title':
+        return <div className="text-sm text-gray-900">{contact.job_title || '—'}</div>
+      case 'email':
+        return contact.email ? (
+          <div className="flex items-center text-sm text-gray-900">
+            <Mail className="h-4 w-4 mr-2 text-gray-400" />
+            <a
+              href={`mailto:${contact.email}`}
+              className="text-[#376EE1] hover:text-[#004565] hover:underline"
+            >
+              {contact.email}
+            </a>
+          </div>
+        ) : (
+          <span className="text-sm text-gray-400">—</span>
+        )
+      case 'phone':
+        return contact.phone ? (
+          <div className="flex items-center text-sm text-gray-900">
+            <Phone className="h-4 w-4 mr-2 text-gray-400" />
+            <a
+              href={`tel:${contact.phone}`}
+              className="text-[#376EE1] hover:text-[#004565] hover:underline"
+            >
+              {contact.phone}
+            </a>
+          </div>
+        ) : (
+          <span className="text-sm text-gray-400">—</span>
+        )
+      case 'company_name':
+        return (contact as Contact & { company_name?: string | null }).company_name ? (
+          <div className="flex items-center text-sm text-[#000000]">
+            <Building2 className="h-4 w-4 mr-2 text-[#004565]/60" />
+            {(contact as Contact & { company_name?: string | null }).company_name}
+          </div>
+        ) : (
+          <span className="text-sm text-[#004565]/50">—</span>
+        )
+      case 'is_decision_maker':
+        return contact.is_decision_maker ? (
+          <Badge variant="default">Decision Maker</Badge>
+        ) : (
+          <span className="text-sm text-gray-400">—</span>
+        )
+      case 'actions':
+        return (
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-[#004565] hover:text-[#004565]/80 hover:bg-[#004565]/10"
+              onClick={() => handleOpenEditDialog(contact)}
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+          </div>
+        )
+      default:
+        return null
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -174,10 +347,13 @@ export default function ContactsPage() {
           <div className="relative">
             <h1 className="text-4xl font-bold text-[#004565]">
               Contacts
+              <span className="ml-2 text-2xl text-[#004565]/60 font-medium">
+                ({contacts?.length || 0})
+              </span>
             </h1>
             <div className="absolute -top-2 -left-2 w-24 h-24 bg-[#376EE1]/20 rounded-full blur-2xl -z-10"></div>
           </div>
-          <Button 
+          <Button
             onClick={handleOpenCreateDialog}
             className="bg-[#004565] hover:bg-[#004565]/90 text-white shadow-lg hover:shadow-xl transition-all duration-300"
           >
@@ -192,159 +368,54 @@ export default function ContactsPage() {
           <CardContent className="p-0">
             <div className="flex flex-col h-[calc(100vh-280px)]">
               <div className="overflow-x-scroll overflow-y-auto flex-1">
-                <table className="w-full">
-                  <thead className="sticky top-0 z-30 bg-[#004565]/5">
-                    <tr className="border-b bg-[#004565]/5">
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('first_name')}
-                      >
-                        <div className="flex items-center">
-                          Name
-                          <SortIcon columnKey="first_name" />
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('job_title')}
-                      >
-                        <div className="flex items-center">
-                          Job Title
-                          <SortIcon columnKey="job_title" />
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('email')}
-                      >
-                        <div className="flex items-center">
-                          Email
-                          <SortIcon columnKey="email" />
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('phone')}
-                      >
-                        <div className="flex items-center">
-                          Phone
-                          <SortIcon columnKey="phone" />
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('company_name')}
-                      >
-                        <div className="flex items-center">
-                          Company
-                          <SortIcon columnKey="company_name" />
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-pointer hover:bg-[#004565]/10 transition-colors"
-                        onClick={() => handleSort('is_decision_maker')}
-                      >
-                        <div className="flex items-center">
-                          Status
-                          <SortIcon columnKey="is_decision_maker" />
-                        </div>
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-semibold text-[#004565] uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-[#004565]/10">
-                    {sortedContacts.map((contact) => (
-                    <tr key={contact.id} className="hover:bg-[#004565]/5 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center">
-                            <Users className="h-5 w-5 text-gray-600" />
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">
-                              {contact.first_name || contact.last_name
-                                ? `${contact.first_name || ''} ${contact.last_name || ''}`.trim()
-                                : 'Unnamed Contact'}
-                            </div>
-                            {contact.department && (
-                              <div className="text-sm text-gray-500">{contact.department}</div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{contact.job_title || '—'}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {contact.email ? (
-                          <div className="flex items-center text-sm text-gray-900">
-                            <Mail className="h-4 w-4 mr-2 text-gray-400" />
-                            <a
-                              href={`mailto:${contact.email}`}
-                              className="text-[#376EE1] hover:text-[#004565] hover:underline"
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <table className="w-full">
+                    <thead className="sticky top-0 z-30 bg-[#004565]/5">
+                      <tr className="border-b bg-[#004565]/5">
+                        <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
+                          {columnOrder.map((columnId) => (
+                            <SortableHeader
+                              key={columnId}
+                              id={columnId}
+                              onClick={() => {
+                                // Only allow sorting if it's not the actions or hash column
+                                if (columnId !== 'actions' && columnId !== 'hash') {
+                                  handleSort(columnId)
+                                }
+                              }}
                             >
-                              {contact.email}
-                            </a>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {contact.phone ? (
-                          <div className="flex items-center text-sm text-gray-900">
-                            <Phone className="h-4 w-4 mr-2 text-gray-400" />
-                            <a
-                              href={`tel:${contact.phone}`}
-                              className="text-[#376EE1] hover:text-[#004565] hover:underline"
-                            >
-                              {contact.phone}
-                            </a>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {(contact as Contact & { company_name?: string | null }).company_name ? (
-                          <div className="flex items-center text-sm text-[#000000]">
-                            <Building2 className="h-4 w-4 mr-2 text-[#004565]/60" />
-                            {(contact as Contact & { company_name?: string | null }).company_name}
-                          </div>
-                        ) : (
-                          <span className="text-sm text-[#004565]/50">—</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {contact.is_decision_maker && (
-                          <Badge variant="default">Decision Maker</Badge>
-                        )}
-                        {!contact.is_decision_maker && (
-                          <span className="text-sm text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-[#004565] hover:text-[#004565]/80 hover:bg-[#004565]/10"
-                            onClick={() => handleOpenEditDialog(contact)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  )                )}
-              </tbody>
-            </table>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="flex items-center">
+                                  {allColumns[columnId as keyof typeof allColumns].label}
+                                  {columnId !== 'actions' && columnId !== 'hash' && <SortIcon columnKey={columnId} />}
+                                </span>
+                              </div>
+                            </SortableHeader>
+                          ))}
+                        </SortableContext>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-[#004565]/10">
+                      {sortedContacts.map((contact, index) => (
+                        <tr key={contact.id} className="hover:bg-[#004565]/5 transition-colors">
+                          {columnOrder.map(columnId => (
+                            <td key={columnId} className="px-6 py-4 whitespace-nowrap">
+                              {renderCell(contact, columnId, index)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </DndContext>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
       ) : (
         <Card className="border-[#004565]/20 shadow-lg bg-white/90 backdrop-blur-sm">
           <CardContent className="py-12 text-center">
@@ -353,7 +424,7 @@ export default function ContactsPage() {
             </div>
             <p className="text-[#004565] font-medium mb-2">No contacts found</p>
             <p className="text-[#004565]/70 text-sm mb-4">Create your first contact to get started.</p>
-            <Button 
+            <Button
               onClick={handleOpenCreateDialog}
               className="mt-4 bg-[#004565] hover:bg-[#004565]/90 text-white shadow-lg hover:shadow-xl transition-all duration-300"
             >
@@ -513,4 +584,3 @@ export default function ContactsPage() {
     </div>
   )
 }
-
