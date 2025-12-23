@@ -31,7 +31,7 @@ import { CSS } from '@dnd-kit/utilities'
 // Sortable Header Component
 function SortableHeader({ id, children }: { id: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id })
-  
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -55,15 +55,15 @@ function SortableHeader({ id, children }: { id: string; children: React.ReactNod
 type FollowupStatus = 'pending' | 'sent' | 'cancelled' | 'skipped'
 
 // Component for each follow-up row
-function FollowUpRow({ 
+function FollowUpRow({
   item,
   index,
-  columnOrder, 
-  daysSince, 
-  isAutoReplyEnabled, 
+  columnOrder,
+  daysSince,
+  isAutoReplyEnabled,
   autoSendEnabled,
   pendingResponse,
-  notificationQueue, 
+  notificationQueue,
   setNotificationQueue,
   onViewDetails,
   onRespond,
@@ -86,7 +86,7 @@ function FollowUpRow({
 }) {
   const hasPendingResponse = pendingResponse && pendingResponse.status === 'pending'
   const showNotification = hasPendingResponse && !autoSendEnabled && !notificationQueue.has(item.lead_id)
-  
+
   // Add to notification queue when pending response is detected
   useEffect(() => {
     if (hasPendingResponse && !autoSendEnabled && !notificationQueue.has(item.lead_id)) {
@@ -100,7 +100,7 @@ function FollowUpRow({
       }
     }
   }, [hasPendingResponse, autoSendEnabled, item.lead_id, item.lead?.name, item.lead?.email, notificationQueue, setNotificationQueue])
-  
+
   // Enable respond button when:
   // 1. Lead has responded
   // 2. There's a pending response
@@ -166,8 +166,8 @@ function FollowUpRow({
                 autoSendEnabled
                   ? 'Auto-send is enabled. Responses are sent automatically without manual review.'
                   : hasPendingResponse
-                  ? 'AI has generated a response. Click to review and approve.'
-                  : 'No AI-generated response available yet. Please wait for the AI to generate a response.'
+                    ? 'AI has generated a response. Click to review and approve.'
+                    : 'No AI-generated response available yet. Please wait for the AI to generate a response.'
               }
             >
               <Reply className="h-4 w-4 mr-1" />
@@ -203,12 +203,12 @@ function FollowUpRow({
         return null
     }
   }
-  
+
   return (
     <tr className={`border-b hover:bg-[#004565]/5 ${showNotification ? 'bg-yellow-50' : ''}`}>
       {columnOrder.map(columnId => (
-        <td 
-          key={columnId} 
+        <td
+          key={columnId}
           className={`px-6 py-4 ${columnId === 'followup_action' ? 'text-center' : columnId === 'actions' ? 'text-right' : ''}`}
         >
           {renderCell(columnId)}
@@ -294,7 +294,7 @@ export default function FollowUpsPage() {
   // Deduplicate by lead_id to show each email only once
   const filteredFollowups = useMemo(() => {
     if (!followupQueue) return []
-    
+
     // First, filter by search term if provided
     let filtered = followupQueue
     if (searchTerm) {
@@ -308,14 +308,14 @@ export default function FollowUpsPage() {
         )
       })
     }
-    
+
     // Deduplicate by lead_id - keep only one entry per lead
     const leadMap = new Map<string, any>()
-    
+
     filtered.forEach((item) => {
       const leadId = item.lead_id
       const existing = leadMap.get(leadId)
-      
+
       if (!existing) {
         // First occurrence of this lead
         leadMap.set(leadId, item)
@@ -326,7 +326,7 @@ export default function FollowUpsPage() {
         // 3. Prefer earlier scheduled_for date
         const existingIsPending = existing.status === 'pending'
         const currentIsPending = item.status === 'pending'
-        
+
         if (currentIsPending && !existingIsPending) {
           // Current is pending, existing is not - prefer current
           leadMap.set(leadId, item)
@@ -350,7 +350,7 @@ export default function FollowUpsPage() {
         }
       }
     })
-    
+
     // Convert map values back to array
     return Array.from(leadMap.values())
   }, [followupQueue, searchTerm])
@@ -375,16 +375,16 @@ export default function FollowUpsPage() {
   const { data: conversationMessages, isLoading: isLoadingMessages } = useLeadMessages(
     selectedFollowup?.lead_id || ''
   )
-  
+
   // Sort messages chronologically (oldest first)
   const sortedMessages = conversationMessages
     ? [...conversationMessages].sort((a: any, b: any) => {
-        const dateA = new Date(a.sent_at || a.created_at).getTime()
-        const dateB = new Date(b.sent_at || b.created_at).getTime()
-        return dateA - dateB
-      })
+      const dateA = new Date(a.sent_at || a.created_at).getTime()
+      const dateB = new Date(b.sent_at || b.created_at).getTime()
+      return dateA - dateB
+    })
     : []
-  
+
 
   // Memoize the function to avoid recreating it on every render
   const getDaysSinceScheduled = useCallback((scheduledFor: string): number => {
@@ -434,7 +434,7 @@ export default function FollowUpsPage() {
     setSelectedFollowup(item)
     setShowRespondDialog(true)
     setUserChanges('')
-    
+
     // Only load from pending_responses table - DO NOT call webhook
     try {
       const pendingResponse = await fetch(`/api/outreach/pending-responses?lead_id=${item.lead_id}&status=pending`)
@@ -457,7 +457,7 @@ export default function FollowUpsPage() {
           // No pending response available yet
           setSuggestedResponse(null)
           alert('No AI-generated response is available yet. Please wait for the AI to generate a response.')
-      setShowRespondDialog(false)
+          setShowRespondDialog(false)
         }
       } else {
         // Error fetching or no response
@@ -476,11 +476,11 @@ export default function FollowUpsPage() {
 
   const handleApproveResponse = async () => {
     if (!selectedFollowup || !suggestedResponse) return
-    
+
     try {
       // Check if there's a pending response to update
       const pendingCheck = await fetch(`/api/outreach/pending-responses?lead_id=${selectedFollowup.lead_id}&status=pending`)
-      
+
       if (pendingCheck.ok) {
         const pendingData = await pendingCheck.json()
         if (pendingData.response) {
@@ -489,18 +489,18 @@ export default function FollowUpsPage() {
           await updatePendingResponse.mutateAsync({
             id: pendingData.response.id,
             updates: {
-        subject: suggestedResponse.subject,
-        content: suggestedResponse.content,
+              subject: suggestedResponse.subject,
+              content: suggestedResponse.content,
               user_changes: userChanges || null,
               status: 'approved',
               approved_at: new Date().toISOString(),
             },
-      })
-      
+          })
+
           alert('Response approved! n8n will automatically send the email.')
-      setShowRespondDialog(false)
-      setSuggestedResponse(null)
-      setUserChanges('')
+          setShowRespondDialog(false)
+          setSuggestedResponse(null)
+          setUserChanges('')
           // Clear notification
           setNotificationQueue(prev => {
             const next = new Set(prev)
@@ -606,7 +606,7 @@ export default function FollowUpsPage() {
                   <Badge className="bg-blue-600 text-white">Active</Badge>
                 </div>
                 <p className="text-sm text-blue-800">
-                  The AI auto-responder is currently handling responses automatically. Manual replies are disabled to prevent conflicts. 
+                  The AI auto-responder is currently handling responses automatically. Manual replies are disabled to prevent conflicts.
                   You can manage the AI responder settings in the <strong>Pipeline</strong> page.
                 </p>
                 {aiResponderConfig?.response_delay_minutes > 0 && (
@@ -752,7 +752,7 @@ export default function FollowUpsPage() {
               Review and customize the suggested response before sending
             </DialogDescription>
           </DialogHeader>
-          
+
           {suggestedResponse ? (
             <div className="space-y-6">
               {/* Suggested Response */}
@@ -936,7 +936,7 @@ export default function FollowUpsPage() {
                     <MessageSquare className="h-5 w-5" />
                     Conversation History
                   </h3>
-                  
+
                   {isLoadingMessages ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin text-[#004565]" />
@@ -945,116 +945,112 @@ export default function FollowUpsPage() {
                   ) : sortedMessages && sortedMessages.length > 0 ? (
                     <div className="space-y-4 max-h-[500px] overflow-y-auto">
                       {sortedMessages.map((message: any, index: number) => {
-                          const messageDate = new Date(message.sent_at || message.created_at)
-                          // Use direction field from lead_email_conversations table
-                          // Direction can be 'inbound' or 'outbound' (lowercase)
-                          const direction = message.direction?.toLowerCase() || 'inbound'
-                          const isOutbound = direction === 'outbound'
-                          
-                          return (
-                            <div
-                              key={message.id || index}
-                              className={`p-4 rounded-lg border ${
-                                isOutbound
-                                  ? 'bg-blue-50 border-blue-200 ml-8'
-                                  : 'bg-green-50 border-green-200 mr-8'
+                        const messageDate = new Date(message.sent_at || message.created_at)
+                        // Use direction field from lead_email_conversations table
+                        // Direction can be 'inbound' or 'outbound' (lowercase)
+                        const direction = message.direction?.toLowerCase() || 'inbound'
+                        const isOutbound = direction === 'outbound'
+
+                        return (
+                          <div
+                            key={message.id || index}
+                            className={`p-4 rounded-lg border ${isOutbound
+                                ? 'bg-blue-50 border-blue-200 ml-8'
+                                : 'bg-green-50 border-green-200 mr-8'
                               }`}
-                            >
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  {isOutbound ? (
-                                    <Mail className="h-4 w-4 text-blue-600" />
-                                  ) : (
-                                    <Reply className="h-4 w-4 text-green-600" />
-                                  )}
-                                  <Badge className={isOutbound ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'}>
-                                    {direction === 'outbound' ? 'OUTBOUND' : 'INBOUND'}
-                                  </Badge>
-                                  <Badge
-                                    className={`${
-                                      message.status === 'sent' || message.status === 'delivered'
-                                        ? 'bg-green-500'
-                                        : message.status === 'replied'
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                {isOutbound ? (
+                                  <Mail className="h-4 w-4 text-blue-600" />
+                                ) : (
+                                  <Reply className="h-4 w-4 text-green-600" />
+                                )}
+                                <Badge className={isOutbound ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'}>
+                                  {direction === 'outbound' ? 'OUTBOUND' : 'INBOUND'}
+                                </Badge>
+                                <Badge
+                                  className={`${message.status === 'sent' || message.status === 'delivered'
+                                      ? 'bg-green-500'
+                                      : message.status === 'replied'
                                         ? 'bg-blue-500'
                                         : message.status === 'failed'
-                                        ? 'bg-red-500'
-                                        : 'bg-gray-500'
+                                          ? 'bg-red-500'
+                                          : 'bg-gray-500'
                                     } text-white text-xs`}
-                                  >
-                                    {message.status || 'queued'}
-                                  </Badge>
-                                </div>
-                                <div className="text-xs text-[#004565]/70">
-                                  {messageDate.toLocaleString()}
-                                </div>
+                                >
+                                  {message.status || 'queued'}
+                                </Badge>
                               </div>
-                              
-                              {/* Email addresses */}
-                              <div className="mb-2 text-xs text-[#004565]/60">
-                                {message.from_email && (
-                                  <div>
-                                    <span className="font-semibold">From:</span> {message.from_email}
-                                  </div>
-                                )}
-                                {message.to_email && (
-                                  <div>
-                                    <span className="font-semibold">To:</span> {message.to_email}
-                                  </div>
-                                )}
-                                {message.cc_email && message.cc_email.length > 0 && (
-                                  <div>
-                                    <span className="font-semibold">CC:</span> {message.cc_email.join(', ')}
-                                  </div>
-                                )}
+                              <div className="text-xs text-[#004565]/70">
+                                {messageDate.toLocaleString()}
                               </div>
-                              
-                              {message.subject && (
-                                <div className="mb-2">
-                                  <span className="text-xs font-semibold text-[#004565]/70">Subject: </span>
-                                  <span className={`text-sm font-medium ${
-                                    isOutbound ? 'text-blue-900' : 'text-green-900'
-                                  }`}>
-                                    {message.subject}
-                                  </span>
+                            </div>
+
+                            {/* Email addresses */}
+                            <div className="mb-2 text-xs text-[#004565]/60">
+                              {message.from_email && (
+                                <div>
+                                  <span className="font-semibold">From:</span> {message.from_email}
                                 </div>
                               )}
-                              
-                              {/* Message body content from body column */}
-                              <div className={`text-sm whitespace-pre-wrap mt-3 ${
-                                isOutbound ? 'text-blue-800' : 'text-green-800'
-                              }`}>
-                                {message.body || '(No content)'}
-                              </div>
-                              
-                              <div className="mt-2 flex items-center gap-4 text-xs text-[#004565]/60">
-                                {message.sent_at && (
-                                  <span>Sent: {new Date(message.sent_at).toLocaleString()}</span>
-                                )}
-                                {message.delivered_at && (
-                                  <span>Delivered: {new Date(message.delivered_at).toLocaleString()}</span>
-                                )}
-                                {message.opened_at && (
-                                  <span>Opened: {new Date(message.opened_at).toLocaleString()}</span>
-                                )}
-                                {message.replied_at && (
-                                  <span>Replied: {new Date(message.replied_at).toLocaleString()}</span>
-                                )}
-                                {message.sequence_step !== null && message.sequence_step !== undefined && (
-                                  <span>Step: {message.sequence_step}</span>
-                                )}
-                                {message.thread_id && (
-                                  <span>Thread: {message.thread_id.substring(0, 8)}...</span>
-                                )}
-                              </div>
-                              
-                              {message.status === 'failed' && (
-                                <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
-                                  <strong>Message failed to send</strong>
+                              {message.to_email && (
+                                <div>
+                                  <span className="font-semibold">To:</span> {message.to_email}
+                                </div>
+                              )}
+                              {message.cc_email && message.cc_email.length > 0 && (
+                                <div>
+                                  <span className="font-semibold">CC:</span> {message.cc_email.join(', ')}
                                 </div>
                               )}
                             </div>
-                          )
-                        })}
+
+                            {message.subject && (
+                              <div className="mb-2">
+                                <span className="text-xs font-semibold text-[#004565]/70">Subject: </span>
+                                <span className={`text-sm font-medium ${isOutbound ? 'text-blue-900' : 'text-green-900'
+                                  }`}>
+                                  {message.subject}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Message body content from body column */}
+                            <div className={`text-sm whitespace-pre-wrap mt-3 ${isOutbound ? 'text-blue-800' : 'text-green-800'
+                              }`}>
+                              {message.body || '(No content)'}
+                            </div>
+
+                            <div className="mt-2 flex items-center gap-4 text-xs text-[#004565]/60">
+                              {message.sent_at && (
+                                <span>Sent: {new Date(message.sent_at).toLocaleString()}</span>
+                              )}
+                              {message.delivered_at && (
+                                <span>Delivered: {new Date(message.delivered_at).toLocaleString()}</span>
+                              )}
+                              {message.opened_at && (
+                                <span>Opened: {new Date(message.opened_at).toLocaleString()}</span>
+                              )}
+                              {message.replied_at && (
+                                <span>Replied: {new Date(message.replied_at).toLocaleString()}</span>
+                              )}
+                              {message.sequence_step !== null && message.sequence_step !== undefined && (
+                                <span>Step: {message.sequence_step}</span>
+                              )}
+                              {message.thread_id && (
+                                <span>Thread: {message.thread_id.substring(0, 8)}...</span>
+                              )}
+                            </div>
+
+                            {message.status === 'failed' && (
+                              <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                                <strong>Message failed to send</strong>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   ) : (
                     <div className="text-center py-8 text-[#004565]/70">
