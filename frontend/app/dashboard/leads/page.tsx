@@ -640,16 +640,23 @@ export default function LeadsPage() {
               <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="text-red-600 font-semibold mb-1">Error Fetching Leads</p>
-                <p className="text-sm text-red-700/80">{fetchError}</p>
+                <p className="text-sm text-red-700/80 mb-2">{fetchError}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleFetchLeads}
+                  className="h-7 text-red-700 border-red-200 hover:bg-red-100 hover:text-red-900"
+                >
+                  <RefreshCw className="h-3 w-3 mr-1.5" />
+                  Try Again
+                </Button>
               </div>
               <button
                 onClick={() => setFetchError(null)}
                 className="text-red-600 hover:text-red-800 transition-colors"
                 aria-label="Dismiss error"
               >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <XCircle className="h-5 w-5" />
               </button>
             </div>
           </CardContent>
@@ -664,16 +671,23 @@ export default function LeadsPage() {
               <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="text-red-600 font-semibold mb-1">Error Verifying Leads</p>
-                <p className="text-sm text-red-700/80">{verifyError}</p>
+                <p className="text-sm text-red-700/80 mb-2">{verifyError}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleVerifyLeads}
+                  className="h-7 text-red-700 border-red-200 hover:bg-red-100 hover:text-red-900"
+                >
+                  <RefreshCw className="h-3 w-3 mr-1.5" />
+                  Try Again
+                </Button>
               </div>
               <button
                 onClick={() => setVerifyError(null)}
                 className="text-red-600 hover:text-red-800 transition-colors"
                 aria-label="Dismiss error"
               >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <XCircle className="h-5 w-5" />
               </button>
             </div>
           </CardContent>
