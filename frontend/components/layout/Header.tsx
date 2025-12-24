@@ -13,6 +13,7 @@ export function Header() {
 
   const handleSignOut = async () => {
     await signOut()
+    router.refresh()
     router.push('/login')
   }
 
@@ -34,8 +35,8 @@ export function Header() {
       <div className="flex items-center gap-4">
         {profile && (
           <>
-            <Link 
-              href="/dashboard/profile" 
+            <Link
+              href="/dashboard/profile"
               className="flex items-center gap-2 hover:opacity-80 transition-all px-3 py-2 rounded-lg hover:bg-[#004565]/5 border border-transparent hover:border-[#004565]/20"
             >
               <div className="h-8 w-8 rounded-full bg-[#004565] flex items-center justify-center">

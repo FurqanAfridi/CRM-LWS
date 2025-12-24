@@ -1,76 +1,82 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { Database } from './types'
 
-// Get environment variables - Next.js embeds NEXT_PUBLIC_ vars at build time
-const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim()
-const supabaseAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim()
+let clientInstance: SupabaseClient<Database> | undefined
+let initError: Error | undefined // Cache initialization errors
 
-// Validate configuration
-const isConfigured = 
-  supabaseUrl !== '' &&
-  supabaseUrl !== 'https://placeholder.supabase.co' &&
-  supabaseUrl.startsWith('https://') &&
-  supabaseUrl.includes('.supabase.co') &&
-  supabaseAnonKey !== '' &&
-  supabaseAnonKey !== 'placeholder-key' &&
-  supabaseAnonKey.startsWith('eyJ')
+function getClient(): SupabaseClient<Database> {
+  // If we already tried and failed, throw the cached error
+  if (initError) throw initError
 
-// Create Supabase client
-export const supabase: SupabaseClient<Database> = createClient<Database>(
-  isConfigured ? supabaseUrl : 'https://placeholder.supabase.co',
-  isConfigured ? supabaseAnonKey : 'placeholder-key',
-  {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-    },
-  }
-)
+  if (clientInstance) return clientInstance
 
-// Check if Supabase is configured
-export function checkSupabaseConfig() {
-  const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim()
-  const key = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim()
-  
-  const configured = 
-    url !== '' &&
-    url !== 'https://placeholder.supabase.co' &&
-    url.startsWith('https://') &&
-    url.includes('.supabase.co') &&
-    key !== '' &&
-    key !== 'placeholder-key' &&
-    key.startsWith('eyJ')
+  const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim()
+  const supabaseAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim()
 
-  if (!configured) {
-    return {
-      configured: false,
-      error: new Error('Supabase environment variables are not configured. Please check your .env.local file.'),
-      details: {
-        url: url ? 'Set (but invalid)' : 'Missing',
-        key: key ? 'Set (but invalid)' : 'Missing',
-      },
+  const isConfigured =
+    supabaseUrl !== '' &&
+    supabaseUrl !== 'https://placeholder.supabase.co' &&
+    supabaseUrl.startsWith('https://') &&
+    supabaseUrl.includes('.supabase.co') &&
+    supabaseAnonKey !== '' &&
+    supabaseAnonKey !== 'placeholder-key' &&
+    supabaseAnonKey.startsWith('eyJ')
+
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development' && !clientInstance) {
+    if (!isConfigured) {
+      console.warn('Supabase not configured. Requests will fail.')
     }
   }
 
-  return { configured: true }
+  if (!isConfigured) {
+    initError = new Error('Supabase not configured: Missing or invalid environment variables')
+    throw initError
+  }
+
+  try {
+    clientInstance = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    })
+    return clientInstance
+  } catch (error) {
+    initError = error instanceof Error ? error : new Error('Failed to create Supabase client')
+    throw initError
+  }
 }
 
-// Development logging (only in development mode)
-if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-  // eslint-disable-next-line no-console
-  console.log('🔍 Supabase Configuration:', {
-    url: isConfigured ? `${supabaseUrl.substring(0, 30)}...` : 'MISSING',
-    key: isConfigured ? 'SET' : 'MISSING',
-    configured: isConfigured,
-  })
-  
-  if (!isConfigured) {
-    // eslint-disable-next-line no-console
-    console.error('❌ Supabase is not configured!')
-    // eslint-disable-next-line no-console
-    console.error('   URL:', supabaseUrl || 'EMPTY')
-    // eslint-disable-next-line no-console
-    console.error('   Key:', supabaseAnonKey ? 'EXISTS' : 'EMPTY')
+// Export a Proxy that initializes the client on first property access
+export const supabase = new Proxy({} as SupabaseClient<Database>, {
+  get: (_target, prop) => {
+    // Ignore special symbols and 'then' to prevent Promise-like behavior
+    if (typeof prop === 'symbol' || prop === 'then') return undefined
+
+    const client = getClient()
+    const value = (client as any)[prop]
+
+    if (typeof value === 'function') {
+      return value.bind(client)
+    }
+
+    return value
+  }
+})
+
+export function checkSupabaseConfig() {
+  try {
+    getClient() // Just try to get the client
+    return { configured: true }
+  } catch (error) {
+    return {
+      configured: false,
+      error: error instanceof Error ? error : new Error('Unknown configuration error'),
+      details: {
+        url: process.env.NEXT_PUBLIC_SUPABASE_URL ? 'Set' : 'Missing',
+        key: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'Set' : 'Missing',
+      },
+    }
   }
 }

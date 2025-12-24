@@ -11,6 +11,47 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { format } from 'date-fns'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  horizontalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+
+// Sortable Header Component
+function SortableHeader({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id })
+  
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    cursor: 'move',
+    zIndex: transform ? 1 : 0,
+  }
+
+  return (
+    <th
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="px-6 py-3 text-left text-xs font-medium text-[#004565] uppercase tracking-wider cursor-move bg-[#004565]/5 relative group touch-none"
+    >
+      {children}
+    </th>
+  )
+}
 
 type ResponseStatus = 'pending' | 'approved' | 'rejected' | 'sent'
 
@@ -40,6 +81,43 @@ export default function ResponsesPage() {
   const [editedSubject, setEditedSubject] = useState('')
   const [editedContent, setEditedContent] = useState('')
   const [userChanges, setUserChanges] = useState('')
+  
+  // Column definitions
+  const allColumns = {
+    hash: { label: '#' },
+    lead: { label: 'Lead' },
+    subject: { label: 'Subject' },
+    status: { label: 'Status' },
+    generated: { label: 'Generated' },
+    actions: { label: 'Actions' },
+  }
+
+  const [columnOrder, setColumnOrder] = useState<string[]>([
+    'hash', 'lead', 'subject', 'status', 'generated', 'actions'
+  ])
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (over && active.id !== over.id) {
+      setColumnOrder((items) => {
+        const oldIndex = items.indexOf(active.id as string)
+        const newIndex = items.indexOf(over.id as string)
+        return arrayMove(items, oldIndex, newIndex)
+      })
+    }
+  }
   
   const { data: aiResponderConfig } = useAIResponderConfig()
   const { data: allResponses, isLoading, error } = usePendingResponses(
@@ -151,6 +229,96 @@ export default function ResponsesPage() {
   const isAutoReplyEnabled = aiResponderConfig?.enabled && aiResponderConfig?.auto_send
   const autoSendEnabled = aiResponderConfig?.auto_send || false
 
+  const renderCell = (response: any, columnId: string, index: number) => {
+    const lead = response.leads || {}
+    const canApprove = !autoSendEnabled && response.status === 'pending'
+
+    switch (columnId) {
+      case 'hash':
+        return <div className="text-sm text-[#004565]/70 font-mono">{index + 1}</div>
+      case 'lead':
+        return (
+          <div>
+            <div className="font-medium text-[#004565] flex items-center gap-2">
+              <User className="h-4 w-4" />
+              {lead.name || lead.email || 'Unknown'}
+            </div>
+            <div className="text-sm text-[#004565]/70">{lead.email || '—'}</div>
+            {lead.company_name && (
+              <div className="text-xs text-[#004565]/60 flex items-center gap-1 mt-1">
+                <Building2 className="h-3 w-3" />
+                {lead.company_name}
+              </div>
+            )}
+          </div>
+        )
+      case 'subject':
+        return (
+          <>
+            <div className="text-sm font-medium text-[#004565]">{response.subject}</div>
+            <div className="text-xs text-[#004565]/60 mt-1 line-clamp-2">
+              {response.content.substring(0, 100)}...
+            </div>
+          </>
+        )
+      case 'status':
+        return getStatusBadge(response.status)
+      case 'generated':
+        return (
+          <>
+            <div className="text-sm text-[#004565]">
+              {format(new Date(response.generated_at), 'MMM d, yyyy')}
+            </div>
+            <div className="text-xs text-[#004565]/60">
+              {format(new Date(response.generated_at), 'h:mm a')}
+            </div>
+          </>
+        )
+      case 'actions':
+        return (
+          <div className="flex items-center justify-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleViewDetails(response)}
+              className="border-[#004565]/30 text-[#004565]"
+            >
+              <Eye className="h-4 w-4 mr-1" />
+              View
+            </Button>
+            {canApprove && (
+              <>
+                <Button
+                  size="sm"
+                  onClick={() => handleApprove(response)}
+                  className="bg-green-500 hover:bg-green-600 text-white"
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-1" />
+                  Approve
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => handleReject(response)}
+                  variant="outline"
+                  className="border-red-300 text-red-700 hover:bg-red-50"
+                >
+                  <XCircle className="h-4 w-4 mr-1" />
+                  Reject
+                </Button>
+              </>
+            )}
+            {autoSendEnabled && response.status === 'pending' && (
+              <span className="text-xs text-[#004565]/60 italic">
+                Auto-send enabled
+              </span>
+            )}
+          </div>
+        )
+      default:
+        return null
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -171,6 +339,7 @@ export default function ResponsesPage() {
     )
   }
 
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -179,10 +348,36 @@ export default function ResponsesPage() {
           <h1 className="text-4xl font-bold text-[#004565]">Responses</h1>
           <p className="text-[#004565]/80 mt-2 font-medium">Review and manage AI-generated responses</p>
         </div>
+        <div className="flex gap-4">
+          <Card className="border-yellow-200 bg-yellow-50 w-32">
+            <CardContent className="p-3 text-center">
+              <div className="text-xl font-bold text-yellow-600">{pendingCount}</div>
+              <div className="text-xs text-yellow-700">Pending</div>
+            </CardContent>
+          </Card>
+          <Card className="border-green-200 bg-green-50 w-32">
+            <CardContent className="p-3 text-center">
+              <div className="text-xl font-bold text-green-600">{approvedCount}</div>
+              <div className="text-xs text-green-700">Approved</div>
+            </CardContent>
+          </Card>
+          <Card className="border-red-200 bg-red-50 w-32">
+            <CardContent className="p-3 text-center">
+              <div className="text-xl font-bold text-red-600">{rejectedCount}</div>
+              <div className="text-xs text-red-700">Rejected</div>
+            </CardContent>
+          </Card>
+          <Card className="border-blue-200 bg-blue-50 w-32">
+            <CardContent className="p-3 text-center">
+              <div className="text-xl font-bold text-blue-600">{sentCount}</div>
+              <div className="text-xs text-blue-700">Sent</div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* AI Auto-Responder Notice */}
-      {isAutoReplyEnabled && (
+      {isAutoReplyEnabled && (  
         <Card className="border-blue-300 bg-blue-50 shadow-md">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
@@ -191,42 +386,15 @@ export default function ResponsesPage() {
               </div>
               <div className="flex-1">
                 <h3 className="text-sm font-semibold text-blue-900 mb-1">AI Auto-Responder is Enabled</h3>
-                <p className="text-xs text-blue-800">
-                  Responses are being sent automatically. You can view conversations but cannot approve or reject responses.
+                <p className="text-xs text-blue-800 ">
+                  The AI auto-responder is currently handling responses automatically. Manual replies are disabled to prevent conflicts. 
+                  You can manage the AI responder settings in the <strong>Pipeline</strong> page.
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
       )}
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="border-yellow-200 bg-yellow-50">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-yellow-600">{pendingCount}</div>
-            <div className="text-sm text-yellow-700">Pending</div>
-          </CardContent>
-        </Card>
-        <Card className="border-green-200 bg-green-50">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">{approvedCount}</div>
-            <div className="text-sm text-green-700">Approved</div>
-          </CardContent>
-        </Card>
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-red-600">{rejectedCount}</div>
-            <div className="text-sm text-red-700">Rejected</div>
-          </CardContent>
-        </Card>
-        <Card className="border-blue-200 bg-blue-50">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-blue-600">{sentCount}</div>
-            <div className="text-sm text-blue-700">Sent</div>
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Filters and Search */}
       <Card className="border-[#004565]/20">
@@ -293,111 +461,51 @@ export default function ResponsesPage() {
       <Card className="border-[#004565]/20 shadow-lg">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-[#004565]/10">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[#004565] uppercase tracking-wider">Lead</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[#004565] uppercase tracking-wider">Subject</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[#004565] uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[#004565] uppercase tracking-wider">Generated</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-[#004565] uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-[#004565]/10">
-                {filteredResponses.length === 0 ? (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <table className="w-full">
+                <thead className="bg-[#004565]/10">
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center">
-                      <MessageSquare className="h-12 w-12 text-[#004565]/30 mx-auto mb-4" />
-                      <p className="text-[#004565]/70 font-medium">No responses found</p>
-                      <p className="text-sm text-[#004565]/50 mt-1">
-                        {searchTerm ? 'Try adjusting your search filters' : 'No pending responses available'}
-                      </p>
-                    </td>
+                    <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
+                      {columnOrder.map((columnId) => (
+                        <SortableHeader key={columnId} id={columnId}>
+                          {allColumns[columnId as keyof typeof allColumns].label}
+                        </SortableHeader>
+                      ))}
+                    </SortableContext>
                   </tr>
-                ) : (
-                  filteredResponses.map((response: any) => {
-                    const lead = response.leads || {}
-                    const canApprove = !autoSendEnabled && response.status === 'pending'
-                    
-                    return (
+                </thead>
+                <tbody className="bg-white divide-y divide-[#004565]/10">
+                  {filteredResponses.length === 0 ? (
+                    <tr>
+                      <td colSpan={columnOrder.length} className="px-6 py-12 text-center">
+                        <MessageSquare className="h-12 w-12 text-[#004565]/30 mx-auto mb-4" />
+                        <p className="text-[#004565]/70 font-medium">No responses found</p>
+                        <p className="text-sm text-[#004565]/50 mt-1">
+                          {searchTerm ? 'Try adjusting your search filters' : 'No pending responses available'}
+                        </p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredResponses.map((response: any, index: number) => (
                       <tr key={response.id} className="border-b hover:bg-[#004565]/5">
-                        <td className="px-6 py-4">
-                          <div>
-                            <div className="font-medium text-[#004565] flex items-center gap-2">
-                              <User className="h-4 w-4" />
-                              {lead.name || lead.email || 'Unknown'}
-                            </div>
-                            <div className="text-sm text-[#004565]/70">{lead.email || '—'}</div>
-                            {lead.company_name && (
-                              <div className="text-xs text-[#004565]/60 flex items-center gap-1 mt-1">
-                                <Building2 className="h-3 w-3" />
-                                {lead.company_name}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-medium text-[#004565]">{response.subject}</div>
-                          <div className="text-xs text-[#004565]/60 mt-1 line-clamp-2">
-                            {response.content.substring(0, 100)}...
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          {getStatusBadge(response.status)}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm text-[#004565]">
-                            {format(new Date(response.generated_at), 'MMM d, yyyy')}
-                          </div>
-                          <div className="text-xs text-[#004565]/60">
-                            {format(new Date(response.generated_at), 'h:mm a')}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleViewDetails(response)}
-                              className="border-[#004565]/30 text-[#004565]"
-                            >
-                              <Eye className="h-4 w-4 mr-1" />
-                              View
-                            </Button>
-                            {canApprove && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleApprove(response)}
-                                  className="bg-green-500 hover:bg-green-600 text-white"
-                                >
-                                  <CheckCircle2 className="h-4 w-4 mr-1" />
-                                  Approve
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleReject(response)}
-                                  variant="outline"
-                                  className="border-red-300 text-red-700 hover:bg-red-50"
-                                >
-                                  <XCircle className="h-4 w-4 mr-1" />
-                                  Reject
-                                </Button>
-                              </>
-                            )}
-                            {autoSendEnabled && response.status === 'pending' && (
-                              <span className="text-xs text-[#004565]/60 italic">
-                                Auto-send enabled
-                              </span>
-                            )}
-                          </div>
-                        </td>
+                        {columnOrder.map((columnId) => (
+                          <td 
+                            key={columnId} 
+                            className={`px-6 py-4 ${columnId === 'actions' ? 'text-center' : ''}`}
+                          >
+                            {renderCell(response, columnId, index)}
+                          </td>
+                        ))}
                       </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </DndContext>
           </div>
         </CardContent>
       </Card>

@@ -10,17 +10,60 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  horizontalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+
+// Sortable Header Component
+function SortableHeader({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    cursor: 'move',
+    zIndex: transform ? 1 : 0,
+  }
+
+  return (
+    <th
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-move bg-[#004565]/5 relative group touch-none"
+    >
+      {children}
+    </th>
+  )
+}
 
 type FollowupStatus = 'pending' | 'sent' | 'cancelled' | 'skipped'
 
 // Component for each follow-up row
-function FollowUpRow({ 
-  item, 
-  daysSince, 
-  isAutoReplyEnabled, 
+function FollowUpRow({
+  item,
+  index,
+  columnOrder,
+  daysSince,
+  isAutoReplyEnabled,
   autoSendEnabled,
   pendingResponse,
-  notificationQueue, 
+  notificationQueue,
   setNotificationQueue,
   onViewDetails,
   onRespond,
@@ -28,6 +71,8 @@ function FollowUpRow({
   getStatusBadge,
 }: {
   item: any
+  index: number
+  columnOrder: string[]
   daysSince: number
   isAutoReplyEnabled: boolean
   autoSendEnabled: boolean
@@ -41,7 +86,7 @@ function FollowUpRow({
 }) {
   const hasPendingResponse = pendingResponse && pendingResponse.status === 'pending'
   const showNotification = hasPendingResponse && !autoSendEnabled && !notificationQueue.has(item.lead_id)
-  
+
   // Add to notification queue when pending response is detected
   useEffect(() => {
     if (hasPendingResponse && !autoSendEnabled && !notificationQueue.has(item.lead_id)) {
@@ -55,32 +100,35 @@ function FollowUpRow({
       }
     }
   }, [hasPendingResponse, autoSendEnabled, item.lead_id, item.lead?.name, item.lead?.email, notificationQueue, setNotificationQueue])
-  
+
   // Enable respond button when:
   // 1. Lead has responded
   // 2. There's a pending response
   // 3. Auto-send (without manual review) is OFF
   const canRespond = item.responded && hasPendingResponse && !autoSendEnabled
-  
-  return (
-    <tr className={`border-b hover:bg-[#004565]/5 ${showNotification ? 'bg-yellow-50' : ''}`}>
-      <td className="px-6 py-4">
-        <div>
-          <div className="font-medium text-[#004565] flex items-center gap-2">
-            <User className="h-4 w-4" />
-            {item.lead?.name || item.lead?.email || 'Unknown'}
-          </div>
-          <div className="text-sm text-[#004565]/70">{item.lead?.email || '—'}</div>
-          {item.lead?.company_name && (
-            <div className="text-xs text-[#004565]/60 flex items-center gap-1 mt-1">
-              <Building2 className="h-3 w-3" />
-              {item.lead.company_name}
+
+  const renderCell = (columnId: string) => {
+    switch (columnId) {
+      case 'hash':
+        return <div className="text-sm text-[#004565]/70 font-mono">{index + 1}</div>
+      case 'lead':
+        return (
+          <div>
+            <div className="font-medium text-[#004565] flex items-center gap-2">
+              <User className="h-4 w-4" />
+              {item.lead?.name || item.lead?.email || 'Unknown'}
             </div>
-          )}
-        </div>
-      </td>
-      <td className="px-6 py-4">
-        {item.sequence?.name ? (
+            <div className="text-sm text-[#004565]/70">{item.lead?.email || '—'}</div>
+            {item.lead?.company_name && (
+              <div className="text-xs text-[#004565]/60 flex items-center gap-1 mt-1">
+                <Building2 className="h-3 w-3" />
+                {item.lead.company_name}
+              </div>
+            )}
+          </div>
+        )
+      case 'sequence':
+        return item.sequence?.name ? (
           <div>
             <div className="font-medium text-[#004565]">{item.sequence.name}</div>
             {item.campaign && (
@@ -89,21 +137,19 @@ function FollowUpRow({
           </div>
         ) : (
           <span className="text-[#004565]/50">No sequence</span>
-        )}
-      </td>
-      <td className="px-6 py-4">
-        <div className="font-medium text-[#004565]">#{item.followup_number}</div>
-      </td>
-      <td className="px-6 py-4">
-        <div className="text-sm font-medium text-[#004565]">
-          {daysSince === 0 ? 'Today' : `${daysSince} day${daysSince !== 1 ? 's' : ''}`}
-        </div>
-      </td>
-      <td className="px-6 py-4">
-        {getStatusBadge(item.status)}
-      </td>
-      <td className="px-6 py-4 text-center">
-        {item.responded ? (
+        )
+      case 'followup_number':
+        return <div className="font-medium text-[#004565]">#{item.followup_number}</div>
+      case 'days':
+        return (
+          <div className="text-sm font-medium text-[#004565]">
+            {daysSince === 0 ? 'Today' : `${daysSince} day${daysSince !== 1 ? 's' : ''}`}
+          </div>
+        )
+      case 'status':
+        return getStatusBadge(item.status)
+      case 'followup_action':
+        return item.responded ? (
           <div className="flex items-center justify-center gap-2">
             {hasPendingResponse && !autoSendEnabled && (
               <Badge className="bg-yellow-500 text-white animate-pulse">
@@ -120,8 +166,8 @@ function FollowUpRow({
                 autoSendEnabled
                   ? 'Auto-send is enabled. Responses are sent automatically without manual review.'
                   : hasPendingResponse
-                  ? 'AI has generated a response. Click to review and approve.'
-                  : 'No AI-generated response available yet. Please wait for the AI to generate a response.'
+                    ? 'AI has generated a response. Click to review and approve.'
+                    : 'No AI-generated response available yet. Please wait for the AI to generate a response.'
               }
             >
               <Reply className="h-4 w-4 mr-1" />
@@ -139,20 +185,35 @@ function FollowUpRow({
             <Mail className="h-4 w-4 mr-1" />
             Follow-up
           </Button>
-        )}
-      </td>
-      <td className="px-6 py-4 text-right">
-        <div className="flex items-center justify-end gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onViewDetails(item)}
-            className="border-[#004565]/30 text-[#004565]"
-          >
-            View
-          </Button>
-        </div>
-      </td>
+        )
+      case 'actions':
+        return (
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onViewDetails(item)}
+              className="border-[#004565]/30 text-[#004565]"
+            >
+              View
+            </Button>
+          </div>
+        )
+      default:
+        return null
+    }
+  }
+
+  return (
+    <tr className={`border-b hover:bg-[#004565]/5 ${showNotification ? 'bg-yellow-50' : ''}`}>
+      {columnOrder.map(columnId => (
+        <td
+          key={columnId}
+          className={`px-6 py-4 ${columnId === 'followup_action' ? 'text-center' : columnId === 'actions' ? 'text-right' : ''}`}
+        >
+          {renderCell(columnId)}
+        </td>
+      ))}
     </tr>
   )
 }
@@ -176,6 +237,52 @@ export default function FollowUpsPage() {
   const [notificationQueue, setNotificationQueue] = useState<Set<string>>(new Set())
   const updatePendingResponse = useUpdatePendingResponse()
 
+  // Column definitions
+  const allColumns = {
+    hash: { label: '#' },
+    lead: { label: 'Lead' },
+    sequence: { label: 'Sequence' },
+    followup_number: { label: 'Follow-up #' },
+    days: { label: 'Days' },
+    status: { label: 'Status' },
+    followup_action: { label: 'Follow-up' },
+    actions: { label: 'Actions' },
+  }
+
+  const [columnOrder, setColumnOrder] = useState<string[]>([
+    'hash',
+    'lead',
+    'sequence',
+    'followup_number',
+    'days',
+    'status',
+    'followup_action',
+    'actions'
+  ])
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (over && active.id !== over.id) {
+      setColumnOrder((items) => {
+        const oldIndex = items.indexOf(active.id as string)
+        const newIndex = items.indexOf(over.id as string)
+        return arrayMove(items, oldIndex, newIndex)
+      })
+    }
+  }
+
   // Request notification permission on mount
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -187,7 +294,7 @@ export default function FollowUpsPage() {
   // Deduplicate by lead_id to show each email only once
   const filteredFollowups = useMemo(() => {
     if (!followupQueue) return []
-    
+
     // First, filter by search term if provided
     let filtered = followupQueue
     if (searchTerm) {
@@ -201,14 +308,14 @@ export default function FollowUpsPage() {
         )
       })
     }
-    
+
     // Deduplicate by lead_id - keep only one entry per lead
     const leadMap = new Map<string, any>()
-    
+
     filtered.forEach((item) => {
       const leadId = item.lead_id
       const existing = leadMap.get(leadId)
-      
+
       if (!existing) {
         // First occurrence of this lead
         leadMap.set(leadId, item)
@@ -219,7 +326,7 @@ export default function FollowUpsPage() {
         // 3. Prefer earlier scheduled_for date
         const existingIsPending = existing.status === 'pending'
         const currentIsPending = item.status === 'pending'
-        
+
         if (currentIsPending && !existingIsPending) {
           // Current is pending, existing is not - prefer current
           leadMap.set(leadId, item)
@@ -243,7 +350,7 @@ export default function FollowUpsPage() {
         }
       }
     })
-    
+
     // Convert map values back to array
     return Array.from(leadMap.values())
   }, [followupQueue, searchTerm])
@@ -268,16 +375,16 @@ export default function FollowUpsPage() {
   const { data: conversationMessages, isLoading: isLoadingMessages } = useLeadMessages(
     selectedFollowup?.lead_id || ''
   )
-  
+
   // Sort messages chronologically (oldest first)
   const sortedMessages = conversationMessages
     ? [...conversationMessages].sort((a: any, b: any) => {
-        const dateA = new Date(a.sent_at || a.created_at).getTime()
-        const dateB = new Date(b.sent_at || b.created_at).getTime()
-        return dateA - dateB
-      })
+      const dateA = new Date(a.sent_at || a.created_at).getTime()
+      const dateB = new Date(b.sent_at || b.created_at).getTime()
+      return dateA - dateB
+    })
     : []
-  
+
 
   // Memoize the function to avoid recreating it on every render
   const getDaysSinceScheduled = useCallback((scheduledFor: string): number => {
@@ -327,7 +434,7 @@ export default function FollowUpsPage() {
     setSelectedFollowup(item)
     setShowRespondDialog(true)
     setUserChanges('')
-    
+
     // Only load from pending_responses table - DO NOT call webhook
     try {
       const pendingResponse = await fetch(`/api/outreach/pending-responses?lead_id=${item.lead_id}&status=pending`)
@@ -350,7 +457,7 @@ export default function FollowUpsPage() {
           // No pending response available yet
           setSuggestedResponse(null)
           alert('No AI-generated response is available yet. Please wait for the AI to generate a response.')
-      setShowRespondDialog(false)
+          setShowRespondDialog(false)
         }
       } else {
         // Error fetching or no response
@@ -369,11 +476,11 @@ export default function FollowUpsPage() {
 
   const handleApproveResponse = async () => {
     if (!selectedFollowup || !suggestedResponse) return
-    
+
     try {
       // Check if there's a pending response to update
       const pendingCheck = await fetch(`/api/outreach/pending-responses?lead_id=${selectedFollowup.lead_id}&status=pending`)
-      
+
       if (pendingCheck.ok) {
         const pendingData = await pendingCheck.json()
         if (pendingData.response) {
@@ -382,18 +489,18 @@ export default function FollowUpsPage() {
           await updatePendingResponse.mutateAsync({
             id: pendingData.response.id,
             updates: {
-        subject: suggestedResponse.subject,
-        content: suggestedResponse.content,
+              subject: suggestedResponse.subject,
+              content: suggestedResponse.content,
               user_changes: userChanges || null,
               status: 'approved',
               approved_at: new Date().toISOString(),
             },
-      })
-      
+          })
+
           alert('Response approved! n8n will automatically send the email.')
-      setShowRespondDialog(false)
-      setSuggestedResponse(null)
-      setUserChanges('')
+          setShowRespondDialog(false)
+          setSuggestedResponse(null)
+          setUserChanges('')
           // Clear notification
           setNotificationQueue(prev => {
             const next = new Set(prev)
@@ -456,7 +563,32 @@ export default function FollowUpsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-bold text-[#004565]">Follow-ups</h1>
-          <p className="text-[#004565]/80 mt-2 font-medium">Manage responses and continue sequences</p>
+        </div>
+        <div className="flex gap-4">
+          <Card className="border-yellow-200 w-32">
+            <CardContent className="p-3 text-center">
+              <div className="text-xl font-bold text-yellow-600">{pendingCount}</div>
+              <div className="text-xs text-yellow-600/70">Pending</div>
+            </CardContent>
+          </Card>
+          <Card className="border-green-200 w-32">
+            <CardContent className="p-3 text-center">
+              <div className="text-xl font-bold text-green-600">{sentCount}</div>
+              <div className="text-xs text-green-600/70">Sent</div>
+            </CardContent>
+          </Card>
+          <Card className="border-red-200 w-32">
+            <CardContent className="p-3 text-center">
+              <div className="text-xl font-bold text-red-600">{cancelledCount}</div>
+              <div className="text-xs text-red-600/70">Cancelled</div>
+            </CardContent>
+          </Card>
+          <Card className="border-gray-200 w-32">
+            <CardContent className="p-3 text-center">
+              <div className="text-xl font-bold text-gray-600">{skippedCount}</div>
+              <div className="text-xs text-gray-600/70">Skipped</div>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
@@ -474,7 +606,7 @@ export default function FollowUpsPage() {
                   <Badge className="bg-blue-600 text-white">Active</Badge>
                 </div>
                 <p className="text-sm text-blue-800">
-                  The AI auto-responder is currently handling responses automatically. Manual replies are disabled to prevent conflicts. 
+                  The AI auto-responder is currently handling responses automatically. Manual replies are disabled to prevent conflicts.
                   You can manage the AI responder settings in the <strong>Pipeline</strong> page.
                 </p>
                 {aiResponderConfig?.response_delay_minutes > 0 && (
@@ -488,33 +620,8 @@ export default function FollowUpsPage() {
         </Card>
       )}
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-4 gap-4">
-        <Card className="border-yellow-200">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-yellow-600">{pendingCount}</div>
-            <div className="text-sm text-yellow-600/70">Pending</div>
-          </CardContent>
-        </Card>
-        <Card className="border-green-200">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">{sentCount}</div>
-            <div className="text-sm text-green-600/70">Sent</div>
-          </CardContent>
-        </Card>
-        <Card className="border-red-200">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-red-600">{cancelledCount}</div>
-            <div className="text-sm text-red-600/70">Cancelled</div>
-          </CardContent>
-        </Card>
-        <Card className="border-gray-200">
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-gray-600">{skippedCount}</div>
-            <div className="text-sm text-gray-600/70">Skipped</div>
-          </CardContent>
-        </Card>
-      </div>
+
+
 
       {/* Filters */}
       <Card className="border-[#004565]/20">
@@ -574,56 +681,64 @@ export default function FollowUpsPage() {
       <Card className="border-[#004565]/20 shadow-lg">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b bg-[#004565]/5">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Lead</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Sequence</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Follow-up #</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Days</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase">Status</th>
-                  <th className="px-6 py-3 text-center text-xs font-semibold text-[#004565] uppercase">Follow-up</th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold text-[#004565] uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredFollowups.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center">
-                      <Clock className="h-12 w-12 mx-auto text-[#004565]/50 mb-4" />
-                      <p className="text-[#004565] font-medium mb-2">No follow-ups found</p>
-                      <p className="text-sm text-[#004565]/70">
-                        {searchTerm || filterStatus !== 'all'
-                          ? 'Try adjusting your filters'
-                          : 'Scheduled follow-ups will appear here'}
-                      </p>
-                    </td>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b bg-[#004565]/5">
+                    <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
+                      {columnOrder.map((columnId) => (
+                        <SortableHeader key={columnId} id={columnId}>
+                          {allColumns[columnId as keyof typeof allColumns].label}
+                        </SortableHeader>
+                      ))}
+                    </SortableContext>
                   </tr>
-                ) : (
-                  filteredFollowups.map((item) => {
-                    const daysSince = getDaysSinceScheduled(item.scheduled_for)
-                    // Find pending response for this lead from the single query
-                    const pendingResponse = allPendingResponses?.find((r: any) => r.lead_id === item.lead_id) || null
-                    return (
-                      <FollowUpRow
-                        key={item.id}
-                        item={item}
-                        daysSince={daysSince}
-                        isAutoReplyEnabled={isAutoReplyEnabled}
-                        autoSendEnabled={autoSendEnabled}
-                        pendingResponse={pendingResponse}
-                        notificationQueue={notificationQueue}
-                        setNotificationQueue={setNotificationQueue}
-                        onViewDetails={handleViewDetails}
-                        onRespond={handleRespond}
-                        onFollowUp={handleFollowUp}
-                        getStatusBadge={getStatusBadge}
-                      />
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredFollowups.length === 0 ? (
+                    <tr>
+                      <td colSpan={columnOrder.length} className="px-6 py-12 text-center">
+                        <Clock className="h-12 w-12 mx-auto text-[#004565]/50 mb-4" />
+                        <p className="text-[#004565] font-medium mb-2">No follow-ups found</p>
+                        <p className="text-sm text-[#004565]/70">
+                          {searchTerm || filterStatus !== 'all'
+                            ? 'Try adjusting your filters'
+                            : 'Scheduled follow-ups will appear here'}
+                        </p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredFollowups.map((item, index) => {
+                      const daysSince = getDaysSinceScheduled(item.scheduled_for)
+                      // Find pending response for this lead from the single query
+                      const pendingResponse = allPendingResponses?.find((r: any) => r.lead_id === item.lead_id) || null
+                      return (
+                        <FollowUpRow
+                          key={item.id}
+                          item={item}
+                          index={index}
+                          columnOrder={columnOrder}
+                          daysSince={daysSince}
+                          isAutoReplyEnabled={isAutoReplyEnabled}
+                          autoSendEnabled={autoSendEnabled}
+                          pendingResponse={pendingResponse}
+                          notificationQueue={notificationQueue}
+                          setNotificationQueue={setNotificationQueue}
+                          onViewDetails={handleViewDetails}
+                          onRespond={handleRespond}
+                          onFollowUp={handleFollowUp}
+                          getStatusBadge={getStatusBadge}
+                        />
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </DndContext>
           </div>
         </CardContent>
       </Card>
@@ -637,7 +752,7 @@ export default function FollowUpsPage() {
               Review and customize the suggested response before sending
             </DialogDescription>
           </DialogHeader>
-          
+
           {suggestedResponse ? (
             <div className="space-y-6">
               {/* Suggested Response */}
@@ -821,7 +936,7 @@ export default function FollowUpsPage() {
                     <MessageSquare className="h-5 w-5" />
                     Conversation History
                   </h3>
-                  
+
                   {isLoadingMessages ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin text-[#004565]" />
@@ -830,116 +945,112 @@ export default function FollowUpsPage() {
                   ) : sortedMessages && sortedMessages.length > 0 ? (
                     <div className="space-y-4 max-h-[500px] overflow-y-auto">
                       {sortedMessages.map((message: any, index: number) => {
-                          const messageDate = new Date(message.sent_at || message.created_at)
-                          // Use direction field from lead_email_conversations table
-                          // Direction can be 'inbound' or 'outbound' (lowercase)
-                          const direction = message.direction?.toLowerCase() || 'inbound'
-                          const isOutbound = direction === 'outbound'
-                          
-                          return (
-                            <div
-                              key={message.id || index}
-                              className={`p-4 rounded-lg border ${
-                                isOutbound
-                                  ? 'bg-blue-50 border-blue-200 ml-8'
-                                  : 'bg-green-50 border-green-200 mr-8'
+                        const messageDate = new Date(message.sent_at || message.created_at)
+                        // Use direction field from lead_email_conversations table
+                        // Direction can be 'inbound' or 'outbound' (lowercase)
+                        const direction = message.direction?.toLowerCase() || 'inbound'
+                        const isOutbound = direction === 'outbound'
+
+                        return (
+                          <div
+                            key={message.id || index}
+                            className={`p-4 rounded-lg border ${isOutbound
+                                ? 'bg-blue-50 border-blue-200 ml-8'
+                                : 'bg-green-50 border-green-200 mr-8'
                               }`}
-                            >
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  {isOutbound ? (
-                                    <Mail className="h-4 w-4 text-blue-600" />
-                                  ) : (
-                                    <Reply className="h-4 w-4 text-green-600" />
-                                  )}
-                                  <Badge className={isOutbound ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'}>
-                                    {direction === 'outbound' ? 'OUTBOUND' : 'INBOUND'}
-                                  </Badge>
-                                  <Badge
-                                    className={`${
-                                      message.status === 'sent' || message.status === 'delivered'
-                                        ? 'bg-green-500'
-                                        : message.status === 'replied'
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                {isOutbound ? (
+                                  <Mail className="h-4 w-4 text-blue-600" />
+                                ) : (
+                                  <Reply className="h-4 w-4 text-green-600" />
+                                )}
+                                <Badge className={isOutbound ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'}>
+                                  {direction === 'outbound' ? 'OUTBOUND' : 'INBOUND'}
+                                </Badge>
+                                <Badge
+                                  className={`${message.status === 'sent' || message.status === 'delivered'
+                                      ? 'bg-green-500'
+                                      : message.status === 'replied'
                                         ? 'bg-blue-500'
                                         : message.status === 'failed'
-                                        ? 'bg-red-500'
-                                        : 'bg-gray-500'
+                                          ? 'bg-red-500'
+                                          : 'bg-gray-500'
                                     } text-white text-xs`}
-                                  >
-                                    {message.status || 'queued'}
-                                  </Badge>
-                                </div>
-                                <div className="text-xs text-[#004565]/70">
-                                  {messageDate.toLocaleString()}
-                                </div>
+                                >
+                                  {message.status || 'queued'}
+                                </Badge>
                               </div>
-                              
-                              {/* Email addresses */}
-                              <div className="mb-2 text-xs text-[#004565]/60">
-                                {message.from_email && (
-                                  <div>
-                                    <span className="font-semibold">From:</span> {message.from_email}
-                                  </div>
-                                )}
-                                {message.to_email && (
-                                  <div>
-                                    <span className="font-semibold">To:</span> {message.to_email}
-                                  </div>
-                                )}
-                                {message.cc_email && message.cc_email.length > 0 && (
-                                  <div>
-                                    <span className="font-semibold">CC:</span> {message.cc_email.join(', ')}
-                                  </div>
-                                )}
+                              <div className="text-xs text-[#004565]/70">
+                                {messageDate.toLocaleString()}
                               </div>
-                              
-                              {message.subject && (
-                                <div className="mb-2">
-                                  <span className="text-xs font-semibold text-[#004565]/70">Subject: </span>
-                                  <span className={`text-sm font-medium ${
-                                    isOutbound ? 'text-blue-900' : 'text-green-900'
-                                  }`}>
-                                    {message.subject}
-                                  </span>
+                            </div>
+
+                            {/* Email addresses */}
+                            <div className="mb-2 text-xs text-[#004565]/60">
+                              {message.from_email && (
+                                <div>
+                                  <span className="font-semibold">From:</span> {message.from_email}
                                 </div>
                               )}
-                              
-                              {/* Message body content from body column */}
-                              <div className={`text-sm whitespace-pre-wrap mt-3 ${
-                                isOutbound ? 'text-blue-800' : 'text-green-800'
-                              }`}>
-                                {message.body || '(No content)'}
-                              </div>
-                              
-                              <div className="mt-2 flex items-center gap-4 text-xs text-[#004565]/60">
-                                {message.sent_at && (
-                                  <span>Sent: {new Date(message.sent_at).toLocaleString()}</span>
-                                )}
-                                {message.delivered_at && (
-                                  <span>Delivered: {new Date(message.delivered_at).toLocaleString()}</span>
-                                )}
-                                {message.opened_at && (
-                                  <span>Opened: {new Date(message.opened_at).toLocaleString()}</span>
-                                )}
-                                {message.replied_at && (
-                                  <span>Replied: {new Date(message.replied_at).toLocaleString()}</span>
-                                )}
-                                {message.sequence_step !== null && message.sequence_step !== undefined && (
-                                  <span>Step: {message.sequence_step}</span>
-                                )}
-                                {message.thread_id && (
-                                  <span>Thread: {message.thread_id.substring(0, 8)}...</span>
-                                )}
-                              </div>
-                              
-                              {message.status === 'failed' && (
-                                <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
-                                  <strong>Message failed to send</strong>
+                              {message.to_email && (
+                                <div>
+                                  <span className="font-semibold">To:</span> {message.to_email}
+                                </div>
+                              )}
+                              {message.cc_email && message.cc_email.length > 0 && (
+                                <div>
+                                  <span className="font-semibold">CC:</span> {message.cc_email.join(', ')}
                                 </div>
                               )}
                             </div>
-                          )
-                        })}
+
+                            {message.subject && (
+                              <div className="mb-2">
+                                <span className="text-xs font-semibold text-[#004565]/70">Subject: </span>
+                                <span className={`text-sm font-medium ${isOutbound ? 'text-blue-900' : 'text-green-900'
+                                  }`}>
+                                  {message.subject}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Message body content from body column */}
+                            <div className={`text-sm whitespace-pre-wrap mt-3 ${isOutbound ? 'text-blue-800' : 'text-green-800'
+                              }`}>
+                              {message.body || '(No content)'}
+                            </div>
+
+                            <div className="mt-2 flex items-center gap-4 text-xs text-[#004565]/60">
+                              {message.sent_at && (
+                                <span>Sent: {new Date(message.sent_at).toLocaleString()}</span>
+                              )}
+                              {message.delivered_at && (
+                                <span>Delivered: {new Date(message.delivered_at).toLocaleString()}</span>
+                              )}
+                              {message.opened_at && (
+                                <span>Opened: {new Date(message.opened_at).toLocaleString()}</span>
+                              )}
+                              {message.replied_at && (
+                                <span>Replied: {new Date(message.replied_at).toLocaleString()}</span>
+                              )}
+                              {message.sequence_step !== null && message.sequence_step !== undefined && (
+                                <span>Step: {message.sequence_step}</span>
+                              )}
+                              {message.thread_id && (
+                                <span>Thread: {message.thread_id.substring(0, 8)}...</span>
+                              )}
+                            </div>
+
+                            {message.status === 'failed' && (
+                              <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                                <strong>Message failed to send</strong>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   ) : (
                     <div className="text-center py-8 text-[#004565]/70">

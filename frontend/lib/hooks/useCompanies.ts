@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import {
   getCompanies,
   getCompanyById,
@@ -15,13 +15,33 @@ type CompanyInsert = Database['public']['Tables']['companies']['Insert']
 type CompanyUpdate = Database['public']['Tables']['companies']['Update']
 
 export function useCompanies(filters?: CompanyFilters) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ['companies', filters],
-    queryFn: () => getCompanies(filters),
-    retry: 0,
-    retryOnMount: false, // Prevent double fetch on mount
-    refetchOnWindowFocus: false,
-    staleTime: 30000, // Cache for 30 seconds instead of always fetching fresh
+    queryFn: async ({ pageParam = 0 }) => {
+      try {
+        // First fetch: limit 50. Subsequent fetches: limit 30.
+        const limit = pageParam === 0 ? 50 : 30
+        const data = await getCompanies({ ...filters, offset: pageParam, limit })
+        return data || []
+      } catch (error) {
+        console.error('Error fetching companies:', error)
+        throw error
+      }
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      if (!lastPage) return undefined
+
+      // If the last page has fewer items than its limit, we've reached the end
+      const lastPageLimit = allPages.length === 1 ? 50 : 30
+      if (lastPage.length < lastPageLimit) return undefined
+
+      // Calculate next offset based on total items fetched so far
+      const totalfetched = allPages.reduce((acc, page) => acc + (page?.length || 0), 0)
+      return totalfetched
+    },
+    // Keep data fresh for a bit
+    staleTime: 30000,
   })
 }
 

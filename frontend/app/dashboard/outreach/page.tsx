@@ -250,7 +250,7 @@ export default function OutreachPage() {
               <table className="w-full">
                 <thead className="sticky top-0 z-30 bg-[#004565]/5">
                   <tr className="border-b bg-[#004565]/5">
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase w-12">
+                    <th className="px-2 py-3 text-center text-xs font-semibold text-[#004565] uppercase w-12">
                       <input
                         type="checkbox"
                         checked={selectedLeadIds.length > 0 && selectedLeadIds.length === leads?.filter(l => l.email && getLeadStatus(l) === 'not_started').length}
@@ -264,6 +264,9 @@ export default function OutreachPage() {
                         }}
                         className="h-4 w-4 text-[#004565] cursor-pointer"
                       />
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase w-12">
+                      #
                     </th>
                     <th 
                       className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase cursor-pointer hover:bg-[#004565]/10 transition-colors"
@@ -325,14 +328,14 @@ export default function OutreachPage() {
                 <tbody>
                   {sortedLeads.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-6 py-12 text-center">
+                      <td colSpan={9} className="px-6 py-12 text-center">
                       <Mail className="h-12 w-12 mx-auto text-[#004565]/50 mb-4" />
                       <p className="text-[#004565] font-medium mb-2">No leads with email addresses</p>
                       <p className="text-sm text-[#004565]/70">Add email addresses to leads to start outreach.</p>
                     </td>
                   </tr>
                 ) : (
-                  sortedLeads.map((lead) => {
+                  sortedLeads.map((lead, index) => {
                     const status = getLeadStatus(lead)
                     const campaign = campaigns?.find((c: any) => c.lead_id === lead.id)
                     const isSelected = selectedLeadIds.includes(lead.id)
@@ -343,7 +346,7 @@ export default function OutreachPage() {
                         key={lead.id} 
                         className={`border-b hover:bg-[#004565]/5 ${isSelected ? 'bg-[#004565]/5' : ''}`}
                       >
-                        <td className="px-6 py-4">
+                        <td className="px-2 py-4 text-center">
                           {canSelect && (
                             <input
                               type="checkbox"
@@ -351,7 +354,11 @@ export default function OutreachPage() {
                               onChange={() => toggleLeadSelection(lead.id)}
                               className="h-4 w-4 text-[#004565] cursor-pointer"
                             />
+                            
                           )}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-[#004565]/70 font-mono">
+                          {index + 1}
                         </td>
                         <td className="px-6 py-4">
                           <div className="font-medium text-[#004565]">{lead.name || lead.email}</div>
