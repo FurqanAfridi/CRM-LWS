@@ -17,33 +17,9 @@ export default function LoginPage() {
     const [password, setPassword] = useState('')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [isConfigured, setIsConfigured] = useState(false)
-    const [checking, setChecking] = useState(true)
 
     // Check Supabase configuration on mount
-    useEffect(() => {
-        const checkConfig = async () => {
-            try {
-                // Check server-side (most reliable)
-                const response = await fetch('/api/test-env')
-                const serverCheck = await response.json()
 
-                if (serverCheck.configured) {
-                    setIsConfigured(true)
-                } else {
-                    console.error('⚠️ Server does not have environment variables configured')
-                    setIsConfigured(false)
-                }
-            } catch (error) {
-                console.error('Failed to check server env vars:', error)
-                setIsConfigured(false)
-            } finally {
-                setChecking(false)
-            }
-        }
-
-        checkConfig()
-    }, [])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -118,33 +94,7 @@ export default function LoginPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {checking ? (
-                        <div className="rounded-md bg-blue-50 border border-blue-200 p-4 mb-4">
-                            <p className="text-sm text-blue-800">Checking configuration...</p>
-                        </div>
-                    ) : !isConfigured ? (
-                        <div className="rounded-md bg-red-50 border border-red-200 p-4 space-y-3 text-sm text-red-900 mb-4">
-                            <div className="flex items-center gap-2">
-                                <AlertCircle className="h-5 w-5 text-red-600" />
-                                <span className="font-bold text-base">Environment Variables Not Configured</span>
-                            </div>
-                            <div className="text-sm space-y-2 ml-7">
-                                <p className="font-semibold">Supabase environment variables are not loaded.</p>
-                                <div className="bg-red-100 p-3 rounded border border-red-300">
-                                    <p className="font-bold mb-2">⚠️ REQUIRED STEPS:</p>
-                                    <ol className="list-decimal list-inside space-y-1 font-mono text-xs">
-                                        <li>Stop dev server: Press <strong>Ctrl+C</strong> in terminal</li>
-                                        <li>Delete cache: <code className="bg-red-200 px-1 rounded">Remove-Item -Recurse -Force .next</code></li>
-                                        <li>Restart server: <code className="bg-red-200 px-1 rounded">npm run dev</code></li>
-                                        <li>Hard refresh browser: <strong>Ctrl+Shift+R</strong></li>
-                                    </ol>
-                                </div>
-                                <p className="text-xs text-red-700 mt-2">
-                                    Check: <a href="/api/test-env" target="_blank" className="underline">http://localhost:3000/api/test-env</a>
-                                </p>
-                            </div>
-                        </div>
-                    ) : null}
+
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                         {error && (
@@ -163,7 +113,7 @@ export default function LoginPage() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
-                                disabled={loading || authLoading || !isConfigured}
+                                disabled={loading || authLoading}
                                 autoComplete="email"
                             />
                         </div>
@@ -177,7 +127,7 @@ export default function LoginPage() {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
-                                disabled={loading || authLoading || !isConfigured}
+                                disabled={loading || authLoading}
                                 autoComplete="current-password"
                             />
                         </div>
@@ -185,7 +135,7 @@ export default function LoginPage() {
                         <Button
                             type="submit"
                             className="w-full bg-[#004565] hover:bg-[#004565]/90 text-white shadow-lg hover:shadow-xl transition-all duration-300"
-                            disabled={loading || authLoading || !isConfigured || checking}
+                            disabled={loading || authLoading}
                         >
                             {loading ? 'Signing in...' : 'Sign In'}
                         </Button>

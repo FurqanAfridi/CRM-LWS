@@ -93,11 +93,11 @@ export default function CompaniesPage() {
   const allColumns = {
     hash: { label: '#' },
     name: { label: 'Company Name' },
-    location_count: { label: 'Location Count' },
+    // location_count: { label: 'Location Count' },
     address: { label: 'Address' },
     icp_score: { label: 'ICP Score' },
-    employee_count: { label: 'Employees' },
-    revenue_range: { label: 'Revenue' },
+    // employee_count: { label: 'Employees' },
+    // revenue_range: { label: 'Revenue' },
     website: { label: 'Website' },
     linkedin_url: { label: 'LinkedIn' },
     facebook_url: { label: 'Facebook' },
@@ -107,8 +107,8 @@ export default function CompaniesPage() {
   }
 
   const [columnOrder, setColumnOrder] = useState<string[]>([
-    'hash', 'name', 'location_count', 'address', 'icp_score',
-    'employee_count', 'revenue_range', 'website', 'linkedin_url',
+    'hash', 'name', 'address', // 'icp_score',
+    'website', 'linkedin_url',
     'facebook_url', 'twitter_url', 'short_description', 'actions'
   ])
 
@@ -354,23 +354,23 @@ export default function CompaniesPage() {
                           )}
                         </div>
                         <CardDescription>
-                          {company.industry_type} • {company.location_count || 0} locations
+                          {company.industry_type}
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-2">
-                          <div className="flex justify-between text-sm">
+                          {/* <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">ICP Score:</span>
                             <span className="font-medium">{company.icp_score}/100</span>
-                          </div>
-                          <div className="flex justify-between text-sm">
+                          </div> */}
+                          {/* <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Employees:</span>
                             <span className="font-medium">{company.employee_count?.toLocaleString() || 'N/A'}</span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Revenue:</span>
                             <span className="font-medium">{company.revenue_range || 'N/A'}</span>
-                          </div>
+                          </div> */}
                           <div className="flex gap-2 mt-4">
                             <Button variant="outline" className="flex-1" onClick={() => handleViewDetails(company)}>
                               View
@@ -484,7 +484,7 @@ export default function CompaniesPage() {
           {selectedCompany && (
             <div className="grid grid-cols-2 gap-4 mt-4">
               <div className="space-y-4">
-                <div>
+                {/* <div>
                   <Label className="text-[#004565]">Location Count</Label>
                   <div className="text-sm">{selectedCompany.location_count || 'N/A'}</div>
                 </div>
@@ -495,7 +495,7 @@ export default function CompaniesPage() {
                 <div>
                   <Label className="text-[#004565]">Revenue</Label>
                   <div className="text-sm">{selectedCompany.revenue_range || 'N/A'}</div>
-                </div>
+                </div> */}
                 <div>
                   <Label className="text-[#004565]">Website</Label>
                   <div className="text-sm text-blue-600 truncate">{selectedCompany.website || 'N/A'}</div>
@@ -514,10 +514,10 @@ export default function CompaniesPage() {
                     {selectedCompany.twitter_url && <Twitter className="h-4 w-4 text-blue-400" />}
                   </div>
                 </div>
-                <div>
+                {/* <div>
                   <Label className="text-[#004565]">ICP Score</Label>
                   <Badge>{selectedCompany.icp_score}</Badge>
-                </div>
+                </div> */}
               </div>
               <div className="col-span-2">
                 <Label className="text-[#004565]">Description</Label>
