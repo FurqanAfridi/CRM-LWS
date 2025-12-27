@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { usePendingResponses, useAIResponderConfig, useLeadMessages, useUpdatePendingResponse } from '@/lib/hooks/useOutreach'
-import { MessageSquare, User, Building2, Clock, CheckCircle2, XCircle, Eye, Filter, Search, Loader2, Bot, Info } from 'lucide-react'
+import { MessageSquare, User, Building2, Clock, CheckCircle2, XCircle, Eye, Filter, Search, Loader2, Bot, Info, Crown, Star, Briefcase } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -54,6 +54,36 @@ function SortableHeader({ id, children }: { id: string; children: React.ReactNod
 }
 
 type ResponseStatus = 'pending' | 'approved' | 'rejected' | 'sent'
+
+// Helper to determine lead priority based on title
+function getLeadPriority(title?: string | null): number {
+  if (!title) return 0
+  const t = title.toLowerCase()
+  
+  // C-Level / Founder / Owner
+  if (
+    t.includes('chief') || 
+    t.includes('ceo') || 
+    t.includes('coo') || 
+    t.includes('cfo') || 
+    t.includes('cto') || 
+    t.includes('cmo') || 
+    t.includes('president') || 
+    t.includes('founder') || 
+    t.includes('owner') ||
+    t.includes('partner') ||
+    t.includes('chairman') ||
+    t.includes('executive')
+  ) return 3
+  
+  // VP / SVP / EVP
+  if (t.includes('vp') || t.includes('vice president')) return 2
+  
+  // Director / Head
+  if (t.includes('director') || t.includes('head of')) return 1
+  
+  return 0
+}
 
 function getStatusBadge(status: ResponseStatus | null) {
   if (!status) return null
@@ -144,17 +174,31 @@ export default function ResponsesPage() {
   // Memoize filtered responses
   const filteredResponses = useMemo(() => {
     if (!allResponses) return []
-    if (!searchTerm) return allResponses
     
-    const searchLower = searchTerm.toLowerCase()
-    return allResponses.filter((response: any) => {
-      const lead = response.leads || {}
-      return (
-        (lead.name?.toLowerCase().includes(searchLower) || false) ||
-        (lead.email?.toLowerCase().includes(searchLower) || false) ||
-        (lead.company_name?.toLowerCase().includes(searchLower) || false) ||
-        (response.subject?.toLowerCase().includes(searchLower) || false)
-      )
+    let result = allResponses
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase()
+      result = allResponses.filter((response: any) => {
+        const lead = response.leads || {}
+        return (
+          (lead.name?.toLowerCase().includes(searchLower) || false) ||
+          (lead.email?.toLowerCase().includes(searchLower) || false) ||
+          (lead.company_name?.toLowerCase().includes(searchLower) || false) ||
+          (response.subject?.toLowerCase().includes(searchLower) || false)
+        )
+      })
+    }
+    
+    // Sort by Priority (High to Low), then by Generated Date (Newest first)
+    return [...result].sort((a: any, b: any) => {
+      const priorityA = getLeadPriority(a.leads?.title)
+      const priorityB = getLeadPriority(b.leads?.title)
+      
+      if (priorityA !== priorityB) {
+        return priorityB - priorityA
+      }
+      
+      return new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime()
     })
   }, [allResponses, searchTerm])
 
@@ -242,10 +286,26 @@ export default function ResponsesPage() {
             <div className="font-medium text-[#004565] flex items-center gap-2">
               <User className="h-4 w-4" />
               {lead.name || lead.email || 'Unknown'}
+              {getLeadPriority(lead.title) === 3 && (
+                <Badge className="bg-amber-500 text-white border-none py-0 h-5 text-[10px] flex gap-1">
+                  <Crown className="h-3 w-3" /> C-Level
+                </Badge>
+              )}
+              {getLeadPriority(lead.title) === 2 && (
+                <Badge className="bg-blue-600 text-white border-none py-0 h-5 text-[10px] flex gap-1">
+                  <Star className="h-3 w-3" /> VP
+                </Badge>
+              )}
             </div>
-            <div className="text-sm text-[#004565]/70">{lead.email || '—'}</div>
+            {lead.title && (
+              <div className="text-xs font-medium text-[#004565]/80 flex items-center gap-1 mt-0.5 ml-6">
+                <Briefcase className="h-3 w-3" />
+                {lead.title}
+              </div>
+            )}
+            <div className="text-sm text-[#004565]/70 ml-6">{lead.email || '—'}</div>
             {lead.company_name && (
-              <div className="text-xs text-[#004565]/60 flex items-center gap-1 mt-1">
+              <div className="text-xs text-[#004565]/60 flex items-center gap-1 mt-1 ml-6">
                 <Building2 className="h-3 w-3" />
                 {lead.company_name}
               </div>

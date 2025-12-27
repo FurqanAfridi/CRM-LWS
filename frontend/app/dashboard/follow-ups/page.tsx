@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useFollowupQueue, useLeadConversation, usePauseSequence, useResumeSequence, useAIResponderConfig, useLeadMessages, usePendingResponses, useUpdatePendingResponse } from '@/lib/hooks/useOutreach'
-import { MessageSquare, Mail, Clock, Calendar, User, Building2, ArrowRight, Reply, Pause, Play, CheckCircle2, Filter, Search, Loader2, Bot, Info, Bell } from 'lucide-react'
+import { MessageSquare, Mail, Clock, Calendar, User, Building2, ArrowRight, Reply, Pause, Play, CheckCircle2, Filter, Search, Loader2, Bot, Info, Bell, Crown, Star, Briefcase } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -55,6 +55,36 @@ function SortableHeader({ id, children }: { id: string; children: React.ReactNod
 type FollowupStatus = 'pending' | 'sent' | 'cancelled' | 'skipped'
 
 // Component for each follow-up row
+// Helper to determine lead priority based on title
+function getLeadPriority(title?: string | null): number {
+  if (!title) return 0
+  const t = title.toLowerCase()
+  
+  // C-Level / Founder / Owner
+  if (
+    t.includes('chief') || 
+    t.includes('ceo') || 
+    t.includes('coo') || 
+    t.includes('cfo') || 
+    t.includes('cto') || 
+    t.includes('cmo') || 
+    t.includes('president') || 
+    t.includes('founder') || 
+    t.includes('owner') ||
+    t.includes('partner') ||
+    t.includes('chairman') ||
+    t.includes('executive')
+  ) return 3
+  
+  // VP / SVP / EVP
+  if (t.includes('vp') || t.includes('vice president')) return 2
+  
+  // Director / Head
+  if (t.includes('director') || t.includes('head of')) return 1
+  
+  return 0
+}
+
 function FollowUpRow({
   item,
   index,
@@ -117,10 +147,26 @@ function FollowUpRow({
             <div className="font-medium text-[#004565] flex items-center gap-2">
               <User className="h-4 w-4" />
               {item.lead?.name || item.lead?.email || 'Unknown'}
+              {getLeadPriority(item.lead?.title) === 3 && (
+                <Badge className="bg-amber-500 text-white border-none py-0 h-5 text-[10px] flex gap-1">
+                  <Crown className="h-3 w-3" /> C-Level
+                </Badge>
+              )}
+              {getLeadPriority(item.lead?.title) === 2 && (
+                <Badge className="bg-blue-600 text-white border-none py-0 h-5 text-[10px] flex gap-1">
+                  <Star className="h-3 w-3" /> VP
+                </Badge>
+              )}
             </div>
-            <div className="text-sm text-[#004565]/70">{item.lead?.email || '—'}</div>
+            {item.lead?.title && (
+              <div className="text-xs font-medium text-[#004565]/80 flex items-center gap-1 mt-0.5 ml-6">
+                <Briefcase className="h-3 w-3" />
+                {item.lead.title}
+              </div>
+            )}
+            <div className="text-sm text-[#004565]/70 ml-6">{item.lead?.email || '—'}</div>
             {item.lead?.company_name && (
-              <div className="text-xs text-[#004565]/60 flex items-center gap-1 mt-1">
+              <div className="text-xs text-[#004565]/60 flex items-center gap-1 mt-1 ml-6">
                 <Building2 className="h-3 w-3" />
                 {item.lead.company_name}
               </div>
@@ -352,7 +398,27 @@ export default function FollowUpsPage() {
     })
 
     // Convert map values back to array
-    return Array.from(leadMap.values())
+    // Convert map values back to array and sort by Priority then Date
+    return Array.from(leadMap.values()).sort((a, b) => {
+      // 1. Priority (Higher first)
+      const priorityA = getLeadPriority(a.lead?.title)
+      const priorityB = getLeadPriority(b.lead?.title)
+      if (priorityA !== priorityB) return priorityB - priorityA
+
+      // 2. Responded logic (Responded first)
+      if (a.responded !== b.responded) return a.responded ? -1 : 1
+
+      // 3. Status logic (Pending first)
+      if (a.status !== b.status) {
+        if (a.status === 'pending') return -1
+        if (b.status === 'pending') return 1
+      }
+
+      // 4. Scheduled Date (Earlier first)
+      const dateA = new Date(a.scheduled_for).getTime()
+      const dateB = new Date(b.scheduled_for).getTime()
+      return dateA - dateB
+    })
   }, [followupQueue, searchTerm])
 
   // Memoize counts to avoid recalculating on every render

@@ -14,13 +14,25 @@ type Company = Database['public']['Tables']['companies']['Row']
 type CompanyInsert = Database['public']['Tables']['companies']['Insert']
 type CompanyUpdate = Database['public']['Tables']['companies']['Update']
 
+export function useCompaniesCount() {
+  return useQuery({
+    queryKey: ['companies-count'],
+    queryFn: async () => {
+      const res = await fetch('/api/companies/count')
+      if (!res.ok) throw new Error('Failed to fetch count')
+      const data = await res.json()
+      return data.count
+    }
+  })
+}
+
 export function useCompanies(filters?: CompanyFilters) {
   return useInfiniteQuery({
     queryKey: ['companies', filters],
     queryFn: async ({ pageParam = 0 }) => {
       try {
-        // First fetch: limit 50. Subsequent fetches: limit 30.
-        const limit = pageParam === 0 ? 50 : 30
+        // Fetch companies with pagination
+        const limit = 50 // Optimized limit for infinite scrolling
         const data = await getCompanies({ ...filters, offset: pageParam, limit })
         return data || []
       } catch (error) {
@@ -33,7 +45,7 @@ export function useCompanies(filters?: CompanyFilters) {
       if (!lastPage) return undefined
 
       // If the last page has fewer items than its limit, we've reached the end
-      const lastPageLimit = allPages.length === 1 ? 50 : 30
+      const lastPageLimit = 50
       if (lastPage.length < lastPageLimit) return undefined
 
       // Calculate next offset based on total items fetched so far

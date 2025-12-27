@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDomainWarmupConfig, updateDomainWarmupConfig, createDomainWarmupConfig } from '@/lib/supabase/queries/outreach'
+import { N8N_WEBHOOK_UPDATE_WARMUP } from '@/lib/supabase/env'
 
 // n8n webhook URL for warmup schedule updates
-const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_UPDATE_WARMUP_SCHEDULE || 'https://auto.lincolnwaste.co/webhook/[id]'
+const N8N_WEBHOOK_URL = N8N_WEBHOOK_UPDATE_WARMUP || 'https://auto.lincolnwaste.co/webhook/[id]'
 
 export async function GET(request: NextRequest) {
   try {

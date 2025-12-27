@@ -46,8 +46,8 @@ export function useDomainWarmup(domain?: string) {
   return useQuery({
     queryKey: ['domain-warmup', domain],
     queryFn: () => getDomainWarmup(domain),
-    refetchInterval: 10 * 60 * 1000, // Refresh every 10 minutes (reduced frequency)
-    staleTime: 5 * 60 * 1000, // Consider stale after 5 minutes
+    refetchInterval: false, // Disabled
+    staleTime: 10 * 60 * 1000, // 10 minutes
     refetchOnWindowFocus: false,
   })
 }
@@ -56,8 +56,8 @@ export function useAllDomainWarmup(filters?: DomainWarmupFilters) {
   return useQuery({
     queryKey: ['domain-warmup-all', filters],
     queryFn: () => getAllDomainWarmup(filters),
-    refetchInterval: 10 * 60 * 1000, // Refresh every 10 minutes
-    staleTime: 5 * 60 * 1000,
+    refetchInterval: false, // Disabled
+    staleTime: 10 * 60 * 1000, // 10 minutes
     refetchOnWindowFocus: false,
   })
 }
@@ -83,7 +83,8 @@ export function useEmailCampaigns(filters?: CampaignFilters) {
   return useQuery({
     queryKey: ['email-campaigns', filters],
     queryFn: () => getEmailCampaigns(filters),
-    staleTime: 30000,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -149,8 +150,8 @@ export function useRespondedLeads() {
   return useQuery({
     queryKey: ['responded-leads'],
     queryFn: () => getRespondedLeads(),
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes (reduced from 1 minute)
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchInterval: false, // Disabled - only fetch on mount or manual refetch
     refetchOnWindowFocus: false,
   })
 }
@@ -167,8 +168,8 @@ export function useFollowupQueue(filters?: { status?: string }) {
   return useQuery({
     queryKey: ['followup-queue', filters],
     queryFn: () => getFollowupQueue(filters),
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes (reduced from 1 minute)
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchInterval: false, // Disabled - only fetch on mount or manual refetch
     refetchOnWindowFocus: false,
   })
 }
@@ -207,8 +208,8 @@ export function useOutreachMetrics(filters?: MetricsFilters) {
   return useQuery({
     queryKey: ['outreach-metrics', filters],
     queryFn: () => getOutreachMetrics(filters),
-    refetchInterval: 5 * 60 * 1000, // Refresh every 5 minutes (reduced from 1 minute)
-    staleTime: 2 * 60 * 1000, // 2 minutes
+    refetchInterval: false, // Disabled
+    staleTime: 10 * 60 * 1000, // 10 minutes
     refetchOnWindowFocus: false,
   })
 }
@@ -312,11 +313,11 @@ export function useStartSequence() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ 
-      lead_id, 
-      sequence_id, 
-      sequence_template_id 
-    }: { 
+    mutationFn: async ({
+      lead_id,
+      sequence_id,
+      sequence_template_id
+    }: {
       lead_id: string
       sequence_id: string
       sequence_template_id?: string | null
@@ -324,8 +325,8 @@ export function useStartSequence() {
       const response = await fetch('/api/outreach/start-sequence', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          lead_id, 
+        body: JSON.stringify({
+          lead_id,
           sequence_id,
           sequence_template_id,
         }),
@@ -420,14 +421,14 @@ export function useSendManualEmail() {
 
 export function useGenerateResponse() {
   return useMutation({
-    mutationFn: async ({ 
-      lead_id, 
-      conversation_history, 
-      user_changes 
-    }: { 
-      lead_id: string; 
-      conversation_history?: any[]; 
-      user_changes?: string 
+    mutationFn: async ({
+      lead_id,
+      conversation_history,
+      user_changes
+    }: {
+      lead_id: string;
+      conversation_history?: any[];
+      user_changes?: string
     }) => {
       const response = await fetch('/api/outreach/generate-response', {
         method: 'POST',

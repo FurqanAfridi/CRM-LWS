@@ -3,6 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Target, Building2, TrendingUp, DollarSign } from 'lucide-react'
 import { useDashboardMetrics } from '@/lib/hooks/useAnalytics'
+import Link from 'next/link'
 
 export default function DashboardPage() {
   const { data: metrics, isLoading, error } = useDashboardMetrics()
@@ -19,73 +20,81 @@ export default function DashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-[#004565]/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 bg-white/90 backdrop-blur-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-[#000000]">Total Leads</CardTitle>
-            <div className="h-10 w-10 rounded-lg bg-[#376EE1]/10 flex items-center justify-center">
-              <Target className="h-5 w-5 text-[#376EE1]" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-[#004565]">
-              {isLoading ? '...' : error ? 'Error' : metrics?.totalLeads || 0}
-            </div>
-            <p className="text-xs text-[#004565]/70 mt-1">
-              {error ? 'Failed to load' : 'Total leads'}
-            </p>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/leads" className="block">
+          <Card className="border-[#004565]/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 bg-white/90 backdrop-blur-sm h-full cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-[#000000]">Total Leads</CardTitle>
+              <div className="h-10 w-10 rounded-lg bg-[#376EE1]/10 flex items-center justify-center">
+                <Target className="h-5 w-5 text-[#376EE1]" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-[#004565]">
+                {isLoading ? '...' : error ? 'Error' : metrics?.totalLeads || 0}
+              </div>
+              <p className="text-xs text-[#004565]/70 mt-1">
+                {error ? 'Failed to load' : 'Total leads'}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card className="border-[#004565]/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 bg-white/90 backdrop-blur-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-[#000000]">Qualified Leads</CardTitle>
-            <div className="h-10 w-10 rounded-lg bg-[#00CD50]/10 flex items-center justify-center">
-              <Target className="h-5 w-5 text-[#00CD50]" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-[#004565]">
-              {isLoading ? '...' : error ? 'Error' : metrics?.qualifiedLeads || 0}
-            </div>
-            <p className="text-xs text-[#004565]/70 mt-1">
-              {error ? 'Failed to load' : 'ICP qualified'}
-            </p>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/leads" className="block">
+          <Card className="border-[#004565]/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 bg-white/90 backdrop-blur-sm h-full cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-[#000000]">Qualified Leads</CardTitle>
+              <div className="h-10 w-10 rounded-lg bg-[#00CD50]/10 flex items-center justify-center">
+                <Target className="h-5 w-5 text-[#00CD50]" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-[#004565]">
+                {isLoading ? '...' : error ? 'Error' : metrics?.qualifiedLeads || 0}
+              </div>
+              <p className="text-xs text-[#004565]/70 mt-1">
+                {error ? 'Failed to load' : 'ICP qualified'}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card className="border-[#004565]/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 bg-white/90 backdrop-blur-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-[#000000]">Companies</CardTitle>
-            <div className="h-10 w-10 rounded-lg bg-[#376EE1]/10 flex items-center justify-center">
-              <Building2 className="h-5 w-5 text-[#376EE1]" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-[#004565]">
-              {isLoading ? '...' : error ? 'Error' : metrics?.totalCompanies || 0}
-            </div>
-            <p className="text-xs text-[#004565]/70 mt-1">
-              {error ? 'Failed to load' : 'Active companies'}
-            </p>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/companies" className="block">
+          <Card className="border-[#004565]/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 bg-white/90 backdrop-blur-sm h-full cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-[#000000]">Companies</CardTitle>
+              <div className="h-10 w-10 rounded-lg bg-[#376EE1]/10 flex items-center justify-center">
+                <Building2 className="h-5 w-5 text-[#376EE1]" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-[#004565]">
+                {isLoading ? '...' : error ? 'Error' : metrics?.totalCompanies || 0}
+              </div>
+              <p className="text-xs text-[#004565]/70 mt-1">
+                {error ? 'Failed to load' : 'Active companies'}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card className="border-[#004565]/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 bg-white/90 backdrop-blur-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-[#000000]">Pipeline Value</CardTitle>
-            <div className="h-10 w-10 rounded-lg bg-[#00FF00]/10 flex items-center justify-center">
-              <DollarSign className="h-5 w-5 text-[#00CD50]" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-[#004565]">
-              {isLoading ? '...' : error ? 'Error' : `$${Number(metrics?.pipelineValue || 0).toLocaleString()}`}
-            </div>
-            <p className="text-xs text-[#004565]/70 mt-1">
-              {error ? 'Failed to load' : 'Total estimated value'}
-            </p>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/pipeline" className="block">
+          <Card className="border-[#004565]/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 bg-white/90 backdrop-blur-sm h-full cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-[#000000]">Pipeline Value</CardTitle>
+              <div className="h-10 w-10 rounded-lg bg-[#00FF00]/10 flex items-center justify-center">
+                <DollarSign className="h-5 w-5 text-[#00CD50]" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-[#004565]">
+                {isLoading ? '...' : error ? 'Error' : `$${Number(metrics?.pipelineValue || 0).toLocaleString()}`}
+              </div>
+              <p className="text-xs text-[#004565]/70 mt-1">
+                {error ? 'Failed to load' : 'Total estimated value'}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* Recent Activity */}

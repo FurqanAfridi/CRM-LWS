@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLeadById } from '@/lib/supabase/queries/leads'
 import { getLeadConversation } from '@/lib/supabase/queries/outreach'
+import { AI_SYSTEM_INSTRUCTION, LINCOLN_VALUE_PROPOSITION } from '@/lib/constants/ai-context'
 
 // n8n webhook URL for generate response
 const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_GENERATE_RESPONSE || 'http://auto.lincolnwaste.co/webhook/generate-response'
@@ -42,8 +43,8 @@ export async function POST(request: NextRequest) {
       company_name: lead.company_name || '',
       company_id: lead.company_id || null,
       industry: (lead as any).industry || '',
-      pain_points: Array.isArray(lead.pain_points) 
-        ? lead.pain_points 
+      pain_points: Array.isArray(lead.pain_points)
+        ? lead.pain_points
         : (lead.pain_points ? JSON.parse(String(lead.pain_points)) : []),
       title: (lead as any).title || '',
       icp_score: lead.icp_score || 0,
@@ -59,6 +60,8 @@ export async function POST(request: NextRequest) {
         lead_data: leadData,
         conversation_history: conversation,
         user_changes: user_changes || null,
+        system_instruction: AI_SYSTEM_INSTRUCTION,
+        company_context: LINCOLN_VALUE_PROPOSITION,
       }),
     })
 

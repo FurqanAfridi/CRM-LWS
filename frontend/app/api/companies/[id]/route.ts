@@ -1,10 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { calculateICPScore } from '@/lib/utils/icp-scoring'
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase/env'
 
 function getSupabaseClient() {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const supabaseUrl = SUPABASE_URL
+    const supabaseKey = SUPABASE_ANON_KEY
 
     if (!supabaseUrl || !supabaseKey) {
         throw new Error('Missing Supabase environment variables')

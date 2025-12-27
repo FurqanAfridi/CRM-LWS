@@ -34,6 +34,7 @@ export function calculateICPScore(company: Company): ICPScoreBreakdown {
     geographicMatch: 0,
   }
   const reasons: string[] = []
+  let isDisqualified = false
 
   if (!company.industry_type) {
     return {
@@ -47,10 +48,13 @@ export function calculateICPScore(company: Company): ICPScoreBreakdown {
   const isRestaurant = company.industry_type === 'restaurant'
   const isHotel = company.industry_type === 'hotel'
 
-  // Industry match (20 points)
+  // Industry match (20 points) - REQUIRED
   if (isRestaurant || isHotel) {
     breakdown.industryMatch = 20
     reasons.push(`Industry match: ${company.industry_type}`)
+  } else {
+    isDisqualified = true
+    reasons.push(`Industry mismatch: ${company.industry_type} is not Restaurant or Hotel`)
   }
 
   if (isRestaurant) {
@@ -58,6 +62,12 @@ export function calculateICPScore(company: Company): ICPScoreBreakdown {
     const locationCount = company.location_count || 0
     const employeeCount = company.employee_count || 0
     const revenue = parseRevenue(company.revenue_range)
+
+    // STRICT MINIMUM: 20 Locations
+    if (locationCount < 20) {
+      isDisqualified = true
+      reasons.push(`DISQUALIFIED: Location count (${locationCount}) below restaurant minimum (20)`)
+    }
 
     // Required criteria (40 points)
     if (locationCount >= 20) {
@@ -102,6 +112,12 @@ export function calculateICPScore(company: Company): ICPScoreBreakdown {
     const locationCount = company.location_count || 0
     const employeeCount = company.employee_count || 0
     const revenue = parseRevenue(company.revenue_range)
+
+    // STRICT MINIMUM: 10 Locations
+    if (locationCount < 10) {
+      isDisqualified = true
+      reasons.push(`DISQUALIFIED: Location count (${locationCount}) below hotel minimum (10)`)
+    }
 
     // Required criteria (40 points)
     if (locationCount >= 10) {
@@ -156,13 +172,14 @@ export function calculateICPScore(company: Company): ICPScoreBreakdown {
     reasons.push(`Geographic match: ${company.headquarters_state}`)
   }
 
-  const totalScore = 
+  const totalScore =
     breakdown.requiredCriteria +
     breakdown.optimalRange +
     breakdown.industryMatch +
     breakdown.geographicMatch
 
-  const isQualified = totalScore >= 70
+  // Override qualification if disqualified criteria met
+  const isQualified = !isDisqualified && totalScore >= 70
 
   return {
     totalScore,

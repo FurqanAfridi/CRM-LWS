@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createCalendarIntegration, getCalendarIntegration } from '@/lib/supabase/queries/outreach'
+import { N8N_WEBHOOK_CALENDAR_OAUTH, APP_URL } from '@/lib/supabase/env'
 
 // n8n webhook URL for OAuth initiation
-const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_CALENDAR_OAUTH || 'http://auto.lincolnwaste.co:5678/webhook/calendly-oauth'
+const N8N_WEBHOOK_URL = N8N_WEBHOOK_CALENDAR_OAUTH || 'http://auto.lincolnwaste.co:5678/webhook/calendly-oauth'
 
 // Calendly OAuth redirect URI - should match what's configured in Calendly app
-const REDIRECT_URI = process.env.NEXT_PUBLIC_APP_URL 
-  ? `${process.env.NEXT_PUBLIC_APP_URL}/api/outreach/calendar/callback`
+const REDIRECT_URI = APP_URL
+  ? `${APP_URL}/api/outreach/calendar/callback`
   : 'http://localhost:3000/api/outreach/calendar/callback'
 
 export async function POST(request: NextRequest) {
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
     const oauthResponse = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         provider,
         redirect_uri: REDIRECT_URI,
         state,
