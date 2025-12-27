@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createEmailCampaign } from '@/lib/supabase/queries/outreach'
+import { N8N_WEBHOOK_START_SEQUENCE } from '@/lib/supabase/env'
 
 // n8n webhook URL - following existing pattern (hardcoded)
-const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_START_SEQUENCE || 'http://auto.lincolnwaste.co/webhook/startsequence'
+const N8N_WEBHOOK_URL = N8N_WEBHOOK_START_SEQUENCE || 'http://auto.lincolnwaste.co/webhook/startsequence'
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
       const url = new URL(N8N_WEBHOOK_URL)
       url.searchParams.append('lead_id', lead_id)
       url.searchParams.append('sequence_id', sequence_id)
-      
+
       // eslint-disable-next-line no-console
       if (process.env.NODE_ENV === 'development') {
         // eslint-disable-next-line no-console
@@ -31,11 +32,11 @@ export async function POST(request: NextRequest) {
         // eslint-disable-next-line no-console
         console.log('Webhook payload (query params):', { lead_id, sequence_id })
       }
-      
+
       const n8nResponse = await fetch(url.toString(), {
         method: 'GET',
       })
-      
+
       // eslint-disable-next-line no-console
       if (process.env.NODE_ENV === 'development') {
         // eslint-disable-next-line no-console

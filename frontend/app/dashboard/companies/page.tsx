@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useCompanies } from '@/lib/hooks/useCompanies'
+import { useCompanies, useCompaniesCount } from '@/lib/hooks/useCompanies'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,8 @@ import { Label } from '@/components/ui/label'
 import Link from 'next/link'
 import {
   Building2, Plus, MapPin, Users, DollarSign, Globe, Linkedin, Facebook, Twitter,
-  FileText, Loader2, LayoutGrid, List, Upload, Ban, CheckCircle2, MoreHorizontal
+  FileText, Loader2, LayoutGrid, List, Upload, Ban, CheckCircle2, MoreHorizontal,
+  Search, ArrowUp, ArrowDown
 } from 'lucide-react'
 import { Database } from '@/lib/supabase/types'
 import {
@@ -43,7 +44,7 @@ import { CSS } from '@dnd-kit/utilities'
 type Company = Database['public']['Tables']['companies']['Row']
 
 // Sortable Header Component
-function SortableHeader({ id, children }: { id: string; children: React.ReactNode }) {
+function SortableHeader({ id, children, onClick }: { id: string; children: React.ReactNode; onClick?: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id })
 
   const style = {
@@ -60,6 +61,7 @@ function SortableHeader({ id, children }: { id: string; children: React.ReactNod
       {...attributes}
       {...listeners}
       className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-move bg-white relative group touch-none border-b border-[#004565]/10 whitespace-nowrap select-none"
+      onClick={onClick}
     >
       <div className="flex items-center gap-2">
         {children}
@@ -86,8 +88,69 @@ export default function CompaniesPage() {
   const scrollTriggerRowRef = useRef<HTMLTableRowElement>(null)
   const bottomSentinelRef = useRef<HTMLDivElement>(null)
 
+  const { data: totalCount, isLoading: isCountLoading } = useCompaniesCount()
+
   // Flatten pages into a single array
-  const companies = data?.pages.flat() || []
+  const allCompanies = data?.pages.flat() || []
+  
+  const [searchTerm, setSearchTerm] = useState('')
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
+
+  // Filter and Sort Logic
+  const filteredCompanies = allCompanies.filter(company => 
+    company.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    company.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    company.industry_type?.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  const companies = [...filteredCompanies].sort((a, b) => {
+    if (!sortConfig) return 0
+    
+    const aValue = (a as any)[sortConfig.key]
+    const bValue = (b as any)[sortConfig.key]
+
+    if (aValue == null && bValue == null) return 0
+    if (aValue == null) return 1
+    if (bValue == null) return -1
+
+    if (typeof aValue === 'number' && typeof bValue === 'number') {
+      return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue
+    }
+
+    const aStr = String(aValue).toLowerCase()
+    const bStr = String(bValue).toLowerCase()
+    return sortConfig.direction === 'asc' 
+      ? aStr.localeCompare(bStr) 
+      : bStr.localeCompare(aStr)
+  })
+
+  // Handle manual DNC Add
+  const [dncInput, setDncInput] = useState('')
+  
+  const handleManualDNCSubmit = () => {
+      if(!dncInput) return;
+      alert(`Successfully added ${dncInput} to DNC list (simulated)`)
+      setDncInput('')
+      setIsDncDialogOpen(false)
+  }
+
+  const handleSort = (key: string) => {
+      setSortConfig(current => ({
+          key,
+          direction: current?.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+      }))
+  }
+
+  const SortIcon = ({ columnKey }: { columnKey: string }) => {
+    if (sortConfig?.key !== columnKey) {
+      return <ArrowUp className="h-3 w-3 ml-1 opacity-30" />
+    }
+    return sortConfig.direction === 'asc' ? (
+      <ArrowUp className="h-3 w-3 ml-1" />
+    ) : (
+      <ArrowDown className="h-3 w-3 ml-1" />
+    )
+  }
 
   // Column definitions for List View
   const allColumns = {
@@ -261,7 +324,6 @@ export default function CompaniesPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Companies</h1>
-            <p className="text-gray-600 mt-1">Manage your company accounts</p>
           </div>
         </div>
         <Card>
@@ -282,18 +344,29 @@ export default function CompaniesPage() {
             Companies
             <div className="flex items-center">
               <span className="text-2xl text-[#004565]/60 font-medium">
-                ({companies.length})
+                ({totalCount || companies.length})
               </span>
               <span className="ml-2 text-sm text-[#004565]/40 font-normal">
                 Total Companies
               </span>
             </div>
           </h1>
-          <p className="text-[#004565]/80 mt-2 font-medium">Manage your company accounts</p>
+          {/* <p className="text-[#004565]/80 mt-2 font-medium">Manage your company accounts</p> */}
           <div className="absolute -top-2 -left-2 w-24 h-24 bg-[#376EE1]/20 rounded-full blur-2xl -z-10"></div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Search Bar */}
+          <div className="relative mr-2">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#004565]/50" />
+            <Input 
+                placeholder="Lookup company..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 w-[250px] bg-white/80 border-[#004565]/20 focus:border-[#004565] focus:ring-[#004565]"
+            />
+          </div>
+
           {/* View Toggle */}
           <div className="bg-white/50 p-1 rounded-lg border border-[#004565]/10 flex items-center mr-2">
             <Button
@@ -416,8 +489,11 @@ export default function CompaniesPage() {
                     <tr className="bg-white border-b border-[#004565]/20">
                       <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
                         {columnOrder.map((columnId) => (
-                          <SortableHeader key={columnId} id={columnId}>
-                            {allColumns[columnId as keyof typeof allColumns].label}
+                          <SortableHeader key={columnId} id={columnId} onClick={() => handleSort(columnId)}>
+                            <div className="flex items-center">
+                                {allColumns[columnId as keyof typeof allColumns].label}
+                                <SortIcon columnKey={columnId} />
+                            </div>
                           </SortableHeader>
                         ))}
                       </SortableContext>
@@ -552,12 +628,16 @@ export default function CompaniesPage() {
             </div>
             <div className="space-y-2">
               <Label>Or add manually</Label>
-              <Input placeholder="Enter email or domain to block..." />
+              <Input 
+                placeholder="Enter email or domain to block..." 
+                value={dncInput}
+                onChange={(e) => setDncInput(e.target.value)}
+              />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDncDialogOpen(false)}>Cancel</Button>
-            <Button onClick={() => handleMarkDNC(null)}>Process List</Button>
+            <Button onClick={handleManualDNCSubmit}>Process List</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

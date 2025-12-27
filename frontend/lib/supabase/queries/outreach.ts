@@ -490,6 +490,7 @@ export interface FollowupQueueItem {
     name: string | null
     email: string | null
     company_name: string | null
+    title?: string | null
   }
   campaign?: {
     id: string
@@ -511,7 +512,8 @@ export async function getFollowupQueue(filters?: { status?: string }) {
         id,
         name,
         email,
-        company_name
+        company_name,
+        title
       ),
       email_campaigns:campaign_id (
         id,
@@ -558,6 +560,7 @@ export async function getFollowupQueue(filters?: { status?: string }) {
         name: lead.name,
         email: lead.email,
         company_name: lead.company_name,
+        title: lead.title,
       } : undefined,
       campaign: campaign ? {
         id: campaign.id,
@@ -1283,6 +1286,7 @@ export interface PendingResponse {
     name: string | null
     email: string | null
     company_name: string | null
+    title?: string | null
   } | null
 }
 
@@ -1295,7 +1299,8 @@ export async function getPendingResponses(leadId?: string, status?: string): Pro
         id,
         name,
         email,
-        company_name
+        company_name,
+        title
       )
     `)
     .order('generated_at', { ascending: false })

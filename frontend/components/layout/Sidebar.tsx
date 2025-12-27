@@ -14,16 +14,20 @@ import {
   Reply,
   Calendar,
   MessageSquare,
+  CheckCircle2,
+  Ban,
 } from 'lucide-react'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Leads', href: '/dashboard/leads', icon: Target },
+  { name: 'Qualified Leads', href: '/dashboard/qualified-leads', icon: CheckCircle2 },
   { name: 'Outreach', href: '/dashboard/outreach', icon: Mail },
   { name: 'Follow-ups', href: '/dashboard/follow-ups', icon: Reply },
   { name: 'Responses', href: '/dashboard/responses', icon: MessageSquare },
   { name: 'Bookings', href: '/dashboard/bookings', icon: Calendar },
   { name: 'Companies', href: '/dashboard/companies', icon: Building2 },
+  { name: 'DNC List', href: '/dashboard/dnc', icon: Ban },
   { name: 'Contacts', href: '/dashboard/contacts', icon: Users },
   { name: 'Pipeline', href: '/dashboard/pipeline', icon: TrendingUp },
 ]

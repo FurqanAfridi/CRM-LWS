@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createEmailSequence } from '@/lib/supabase/queries/outreach'
+import { N8N_WEBHOOK_VALIDATE_SEQUENCE } from '@/lib/supabase/env'
 
 // n8n webhook URL for sequence validation
-const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_VALIDATE_SEQUENCE || 'https://auto.lincolnwaste.co/webhook/[id]'
+const N8N_WEBHOOK_URL = N8N_WEBHOOK_VALIDATE_SEQUENCE || 'https://auto.lincolnwaste.co/webhook/[id]'
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,10 +26,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Optional: Call n8n webhook for validation (only if webhook URL is configured and not a placeholder)
-    const isWebhookConfigured = N8N_WEBHOOK_URL && 
-                                 !N8N_WEBHOOK_URL.includes('[id]') && 
-                                 N8N_WEBHOOK_URL !== 'https://auto.lincolnwaste.co/webhook/[id]'
-    
+    const isWebhookConfigured = N8N_WEBHOOK_URL &&
+      !N8N_WEBHOOK_URL.includes('[id]') &&
+      N8N_WEBHOOK_URL !== 'https://auto.lincolnwaste.co/webhook/[id]'
+
     if (isWebhookConfigured) {
       try {
         const validateResponse = await fetch(N8N_WEBHOOK_URL, {

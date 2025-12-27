@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useQueryClient } from '@tanstack/react-query'
 import { Database } from '@/lib/supabase/types'
-import { Users, Plus, Mail, Phone, Building2, ArrowRight, Edit, ArrowUp, ArrowDown } from 'lucide-react'
+import { Users, Plus, Mail, Phone, Building2, ArrowRight, Edit, ArrowUp, ArrowDown, Search } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -66,6 +66,7 @@ export default function ContactsPage() {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
   const [isFormDialogOpen, setIsFormDialogOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
 
   // Form state
@@ -138,7 +139,16 @@ export default function ContactsPage() {
   const sortedContacts = useMemo(() => {
     if (!contacts || !sortConfig) return contacts || []
 
-    return [...contacts].sort((a, b) => {
+    const filteredContacts = contacts?.filter(contact => {
+      const searchLower = searchTerm.toLowerCase()
+      const fullName = `${contact.first_name || ''} ${contact.last_name || ''}`.toLowerCase()
+      const email = (contact.email || '').toLowerCase()
+      const company = ((contact as any).company_name || '').toLowerCase() // Type assertion for joined field
+      
+      return fullName.includes(searchLower) || email.includes(searchLower) || company.includes(searchLower)
+    }) || []
+
+    return [...filteredContacts].sort((a, b) => {
       const aValue = (a as any)[sortConfig.key]
       const bValue = (b as any)[sortConfig.key]
 
@@ -158,7 +168,7 @@ export default function ContactsPage() {
       const comparison = aStr.localeCompare(bStr)
       return sortConfig.direction === 'asc' ? comparison : -comparison
     })
-  }, [contacts, sortConfig])
+  }, [contacts, sortConfig, searchTerm])
 
   const SortIcon = ({ columnKey }: { columnKey: string }) => {
     if (sortConfig?.key !== columnKey) {
@@ -348,18 +358,29 @@ export default function ContactsPage() {
             <h1 className="text-4xl font-bold text-[#004565]">
               Contacts
               <span className="ml-2 text-2xl text-[#004565]/60 font-medium">
-                ({contacts?.length || 0})
+                ({sortedContacts.length})
               </span>
             </h1>
             <div className="absolute -top-2 -left-2 w-24 h-24 bg-[#376EE1]/20 rounded-full blur-2xl -z-10"></div>
           </div>
-          <Button
-            onClick={handleOpenCreateDialog}
-            className="bg-[#004565] hover:bg-[#004565]/90 text-white shadow-lg hover:shadow-xl transition-all duration-300"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            New Contact
-          </Button>
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#004565]/50" />
+              <Input 
+                placeholder="Lookup contact..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 w-[250px] bg-white border-[#004565]/20 focus:border-[#004565] focus:ring-[#004565]"
+              />
+            </div>
+            <Button
+              onClick={handleOpenCreateDialog}
+              className="bg-[#004565] hover:bg-[#004565]/90 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              New Contact
+            </Button>
+          </div>
         </div>
       </div>
 

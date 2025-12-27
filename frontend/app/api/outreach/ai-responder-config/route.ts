@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAIResponderConfig, upsertAIResponderConfig } from '@/lib/supabase/queries/outreach'
+import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY } from '@/lib/supabase/env'
 
 // Create a server-side Supabase client for API routes
 function getSupabaseServerClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  
+  const supabaseUrl = SUPABASE_URL
+  const supabaseServiceKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY
+
   return createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
@@ -26,11 +27,11 @@ async function getUserId(request: NextRequest): Promise<string | null> {
     const token = authHeader.replace('Bearer ', '')
     const supabase = getSupabaseServerClient()
     const { data: { user }, error } = await supabase.auth.getUser(token)
-    
+
     if (error || !user) {
       return null
     }
-    
+
     return user.id
   } catch {
     return null
@@ -40,7 +41,7 @@ async function getUserId(request: NextRequest): Promise<string | null> {
 export async function GET(request: NextRequest) {
   try {
     const userId = await getUserId(request)
-    
+
     const config = await getAIResponderConfig(userId || null)
 
     return NextResponse.json({
