@@ -25,6 +25,7 @@ export async function GET(request: Request) {
 
         const company_id = searchParams.get('company_id')
         const is_decision_maker = searchParams.get('is_decision_maker')
+        const search = searchParams.get('search')
 
         let query = supabase
             .from('contacts')
@@ -42,6 +43,11 @@ export async function GET(request: Request) {
             query = query.eq('is_decision_maker', isTrue)
         }
 
+        // Add search functionality - search across first_name, last_name, and email
+        if (search && search.trim()) {
+            query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`)
+        }
+
         const { data, error } = await query
 
         if (error) {
@@ -49,10 +55,29 @@ export async function GET(request: Request) {
         }
 
         // Transform data to include company_name flattened (matching client-side expectation)
-        const transformed = (data || []).map((contact: any) => ({
-            ...contact,
-            company_name: contact.companies?.name || null
-        }))
+        const transformed = (data || []).map((contact: any) => {
+            const company_name = contact.companies?.name || null
+
+            // If search is provided, also filter by company name (since we can't use OR with joined tables easily)
+            if (search && search.trim() && company_name) {
+                const searchLower = search.toLowerCase()
+                const companyMatches = company_name.toLowerCase().includes(searchLower)
+                const nameMatches =
+                    contact.first_name?.toLowerCase().includes(searchLower) ||
+                    contact.last_name?.toLowerCase().includes(searchLower) ||
+                    contact.email?.toLowerCase().includes(searchLower)
+
+                // Only include if either matches
+                if (!companyMatches && !nameMatches) {
+                    return null
+                }
+            }
+
+            return {
+                ...contact,
+                company_name
+            }
+        }).filter(Boolean) // Remove nulls
 
         return NextResponse.json(transformed)
 

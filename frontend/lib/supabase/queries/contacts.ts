@@ -7,12 +7,14 @@ type ContactUpdate = Database['public']['Tables']['contacts']['Update']
 export interface ContactFilters {
   company_id?: string
   is_decision_maker?: boolean
+  search?: string
 }
 
 export async function getContacts(filters?: ContactFilters) {
   const params = new URLSearchParams()
   if (filters?.company_id) params.append('company_id', filters.company_id)
   if (filters?.is_decision_maker !== undefined) params.append('is_decision_maker', String(filters.is_decision_maker))
+  if (filters?.search) params.append('search', filters.search)
 
   const res = await fetch(`/api/contacts?${params.toString()}`)
   if (!res.ok) {

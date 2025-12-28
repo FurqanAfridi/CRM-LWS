@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useContacts, useCreateContact, useUpdateContact } from '@/lib/hooks/useContacts'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useQueryClient } from '@tanstack/react-query'
 import { Database } from '@/lib/supabase/types'
-import { Users, Plus, Mail, Phone, Building2, ArrowRight, Edit, ArrowUp, ArrowDown, Search } from 'lucide-react'
+import { Users, Plus, Mail, Phone, Building2, ArrowRight, Edit, ArrowUp, ArrowDown, Search, Loader2 } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -59,15 +59,34 @@ function SortableHeader({ id, children, onClick }: { id: string; children: React
 }
 
 export default function ContactsPage() {
-  const { data: contacts, isLoading, error } = useContacts()
+  const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
+  const hasLoadedData = useRef(false)
+
+  // Debounce search term to avoid excessive API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm)
+    }, 300) // 300ms delay
+
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
+  const { data: contacts, isLoading, error } = useContacts({ search: debouncedSearch })
+  
+  // Track if we've ever loaded data
+  useEffect(() => {
+    if (contacts && contacts.length > 0) {
+      hasLoadedData.current = true
+    }
+  }, [contacts])
   const createContact = useCreateContact()
   const updateContact = useUpdateContact()
   const queryClient = useQueryClient()
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
   const [isFormDialogOpen, setIsFormDialogOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
 
   // Form state
   const [formData, setFormData] = useState<Partial<ContactInsert & { company_name?: string | null }>>({
@@ -136,19 +155,12 @@ export default function ContactsPage() {
     })
   }
 
+  // Client-side sorting only (search is now server-side)
   const sortedContacts = useMemo(() => {
-    if (!contacts || !sortConfig) return contacts || []
+    if (!contacts) return []
+    if (!sortConfig) return contacts
 
-    const filteredContacts = contacts?.filter(contact => {
-      const searchLower = searchTerm.toLowerCase()
-      const fullName = `${contact.first_name || ''} ${contact.last_name || ''}`.toLowerCase()
-      const email = (contact.email || '').toLowerCase()
-      const company = ((contact as any).company_name || '').toLowerCase() // Type assertion for joined field
-      
-      return fullName.includes(searchLower) || email.includes(searchLower) || company.includes(searchLower)
-    }) || []
-
-    return [...filteredContacts].sort((a, b) => {
+    return [...contacts].sort((a, b) => {
       const aValue = (a as any)[sortConfig.key]
       const bValue = (b as any)[sortConfig.key]
 
@@ -168,7 +180,7 @@ export default function ContactsPage() {
       const comparison = aStr.localeCompare(bStr)
       return sortConfig.direction === 'asc' ? comparison : -comparison
     })
-  }, [contacts, sortConfig, searchTerm])
+  }, [contacts, sortConfig])
 
   const SortIcon = ({ columnKey }: { columnKey: string }) => {
     if (sortConfig?.key !== columnKey) {
@@ -316,7 +328,8 @@ export default function ContactsPage() {
     }
   }
 
-  if (isLoading) {
+  // Only show full-page loading on initial load (before any data has been loaded)
+  if (isLoading && !hasLoadedData.current) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
@@ -355,11 +368,16 @@ export default function ContactsPage() {
       <div className="sticky top-0 z-40 bg-white shadow-sm pb-4">
         <div className="flex items-center justify-between">
           <div className="relative">
-            <h1 className="text-4xl font-bold text-[#004565]">
+            <h1 className="text-4xl font-bold text-[#004565] flex items-baseline gap-3">
               Contacts
-              <span className="ml-2 text-2xl text-[#004565]/60 font-medium">
-                ({sortedContacts.length})
-              </span>
+              <div className="flex items-center">
+                <span className="text-2xl text-[#004565]/60 font-medium">
+                  ({sortedContacts.length})
+                </span>
+                <span className="ml-2 text-sm text-[#004565]/40 font-normal">
+                  {debouncedSearch ? 'Search Results' : 'Total Contacts'}
+                </span>
+              </div>
             </h1>
             <div className="absolute -top-2 -left-2 w-24 h-24 bg-[#376EE1]/20 rounded-full blur-2xl -z-10"></div>
           </div>
@@ -370,8 +388,13 @@ export default function ContactsPage() {
                 placeholder="Lookup contact..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 w-[250px] bg-white border-[#004565]/20 focus:border-[#004565] focus:ring-[#004565]"
+                className="pl-9 pr-24 w-[250px] bg-white border-[#004565]/20 focus:border-[#004565] focus:ring-[#004565]"
               />
+              {searchTerm && searchTerm !== debouncedSearch && (
+                <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-[#004565]/60 font-medium">
+                  Loading...
+                </span>
+              )}
             </div>
             <Button
               onClick={handleOpenCreateDialog}

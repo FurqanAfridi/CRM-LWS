@@ -71,14 +71,36 @@ function SortableHeader({ id, children, onClick }: { id: string; children: React
 }
 
 export default function CompaniesPage() {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
+  const hasLoadedData = useRef(false)
+
+  // Debounce search term to avoid excessive API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm)
+    }, 300) // 300ms delay
+
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
   const {
     data,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
     isLoading,
+    isFetching,
     error
-  } = useCompanies()
+  } = useCompanies({ search: debouncedSearch })
+
+  // Track if we've ever loaded data
+  useEffect(() => {
+    if (data && data.pages.length > 0) {
+      hasLoadedData.current = true
+    }
+  }, [data])
 
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -93,36 +115,27 @@ export default function CompaniesPage() {
   // Flatten pages into a single array
   const allCompanies = data?.pages.flat() || []
   
-  const [searchTerm, setSearchTerm] = useState('')
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
+  // Client-side sorting only (search is now server-side)
+  const companies = !sortConfig 
+    ? allCompanies 
+    : [...allCompanies].sort((a, b) => {
+        const aValue = (a as any)[sortConfig.key]
+        const bValue = (b as any)[sortConfig.key]
 
-  // Filter and Sort Logic
-  const filteredCompanies = allCompanies.filter(company => 
-    company.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    company.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    company.industry_type?.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+        if (aValue == null && bValue == null) return 0
+        if (aValue == null) return 1
+        if (bValue == null) return -1
 
-  const companies = [...filteredCompanies].sort((a, b) => {
-    if (!sortConfig) return 0
-    
-    const aValue = (a as any)[sortConfig.key]
-    const bValue = (b as any)[sortConfig.key]
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue
+        }
 
-    if (aValue == null && bValue == null) return 0
-    if (aValue == null) return 1
-    if (bValue == null) return -1
-
-    if (typeof aValue === 'number' && typeof bValue === 'number') {
-      return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue
-    }
-
-    const aStr = String(aValue).toLowerCase()
-    const bStr = String(bValue).toLowerCase()
-    return sortConfig.direction === 'asc' 
-      ? aStr.localeCompare(bStr) 
-      : bStr.localeCompare(aStr)
-  })
+        const aStr = String(aValue).toLowerCase()
+        const bStr = String(bValue).toLowerCase()
+        return sortConfig.direction === 'asc' 
+          ? aStr.localeCompare(bStr) 
+          : bStr.localeCompare(aStr)
+      })
 
   // Handle manual DNC Add
   const [dncInput, setDncInput] = useState('')
@@ -307,7 +320,8 @@ export default function CompaniesPage() {
     }
   }
 
-  if (isLoading) {
+  // Only show full-page loading on initial load (before any data has been loaded)
+  if (isLoading && !hasLoadedData.current) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
@@ -344,10 +358,10 @@ export default function CompaniesPage() {
             Companies
             <div className="flex items-center">
               <span className="text-2xl text-[#004565]/60 font-medium">
-                ({totalCount || companies.length})
+                ({debouncedSearch ? companies.length : (totalCount || companies.length)})
               </span>
               <span className="ml-2 text-sm text-[#004565]/40 font-normal">
-                Total Companies
+                {debouncedSearch ? 'Search Results' : 'Total Companies'}
               </span>
             </div>
           </h1>
@@ -363,8 +377,13 @@ export default function CompaniesPage() {
                 placeholder="Lookup company..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 w-[250px] bg-white/80 border-[#004565]/20 focus:border-[#004565] focus:ring-[#004565]"
+                className="pl-9 pr-24 w-[250px] bg-white/80 border-[#004565]/20 focus:border-[#004565] focus:ring-[#004565]"
             />
+            {searchTerm && searchTerm !== debouncedSearch && (
+              <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-[#004565]/60 font-medium">
+                Loading...
+              </span>
+            )}
           </div>
 
           {/* View Toggle */}
