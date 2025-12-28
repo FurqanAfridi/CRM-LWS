@@ -28,6 +28,7 @@ export async function GET(request: Request) {
         const limit = parseInt(searchParams.get('limit') || '50')
         const industry_type = searchParams.get('industry_type')
         const icp_qualified = searchParams.get('icp_qualified')
+        const search = searchParams.get('search')
 
         const from = offset
         const to = from + limit - 1
@@ -45,6 +46,12 @@ export async function GET(request: Request) {
         if (icp_qualified !== null && icp_qualified !== undefined) {
             const isTrue = icp_qualified === 'true'
             query = query.eq('icp_qualified', isTrue)
+        }
+
+        // Add search functionality - search across name and address only
+        // Note: industry_type is excluded because it's an enum and causes issues with ilike
+        if (search && search.trim()) {
+            query = query.or(`name.ilike.%${search}%,address.ilike.%${search}%`)
         }
 
         const { data, error } = await query

@@ -9,6 +9,7 @@ export interface CompanyFilters {
   icp_qualified?: boolean
   location_count_min?: number
   location_count_max?: number
+  search?: string
   offset?: number
   limit?: number
 }
@@ -19,6 +20,7 @@ export async function getCompanies(filters?: CompanyFilters) {
   if (filters?.limit) params.append('limit', String(filters.limit))
   if (filters?.industry_type) params.append('industry_type', filters.industry_type)
   if (filters?.icp_qualified !== undefined) params.append('icp_qualified', String(filters.icp_qualified))
+  if (filters?.search) params.append('search', filters.search)
 
   const res = await fetch(`/api/companies?${params.toString()}`)
   if (!res.ok) {
