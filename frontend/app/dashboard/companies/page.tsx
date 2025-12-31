@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useCompanies, useCompaniesCount } from '@/lib/hooks/useCompanies'
+import { useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -71,6 +72,7 @@ function SortableHeader({ id, children, onClick }: { id: string; children: React
 }
 
 export default function CompaniesPage() {
+  const queryClient = useQueryClient()
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
@@ -105,6 +107,10 @@ export default function CompaniesPage() {
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isDncDialogOpen, setIsDncDialogOpen] = useState(false)
+  const [isDncConfirmOpen, setIsDncConfirmOpen] = useState(false)
+  const [isSubmittingDNC, setIsSubmittingDNC] = useState(false)
+  const [dncReasonInput, setDncReasonInput] = useState('')
+  const [companyToMarkDNC, setCompanyToMarkDNC] = useState<Company | null>(null)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const scrollTriggerRef = useRef<HTMLDivElement>(null)
   const scrollTriggerRowRef = useRef<HTMLTableRowElement>(null)
@@ -114,44 +120,44 @@ export default function CompaniesPage() {
 
   // Flatten pages into a single array
   const allCompanies = data?.pages.flat() || []
-  
+
   // Client-side sorting only (search is now server-side)
-  const companies = !sortConfig 
-    ? allCompanies 
+  const companies = !sortConfig
+    ? allCompanies
     : [...allCompanies].sort((a, b) => {
-        const aValue = (a as any)[sortConfig.key]
-        const bValue = (b as any)[sortConfig.key]
+      const aValue = (a as any)[sortConfig.key]
+      const bValue = (b as any)[sortConfig.key]
 
-        if (aValue == null && bValue == null) return 0
-        if (aValue == null) return 1
-        if (bValue == null) return -1
+      if (aValue == null && bValue == null) return 0
+      if (aValue == null) return 1
+      if (bValue == null) return -1
 
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue
-        }
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue
+      }
 
-        const aStr = String(aValue).toLowerCase()
-        const bStr = String(bValue).toLowerCase()
-        return sortConfig.direction === 'asc' 
-          ? aStr.localeCompare(bStr) 
-          : bStr.localeCompare(aStr)
-      })
+      const aStr = String(aValue).toLowerCase()
+      const bStr = String(bValue).toLowerCase()
+      return sortConfig.direction === 'asc'
+        ? aStr.localeCompare(bStr)
+        : bStr.localeCompare(aStr)
+    })
 
   // Handle manual DNC Add
   const [dncInput, setDncInput] = useState('')
-  
+
   const handleManualDNCSubmit = () => {
-      if(!dncInput) return;
-      alert(`Successfully added ${dncInput} to DNC list (simulated)`)
-      setDncInput('')
-      setIsDncDialogOpen(false)
+    if (!dncInput) return;
+    alert(`Successfully added ${dncInput} to DNC list (simulated)`)
+    setDncInput('')
+    setIsDncDialogOpen(false)
   }
 
   const handleSort = (key: string) => {
-      setSortConfig(current => ({
-          key,
-          direction: current?.key === key && current.direction === 'asc' ? 'desc' : 'asc'
-      }))
+    setSortConfig(current => ({
+      key,
+      direction: current?.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+    }))
   }
 
   const SortIcon = ({ columnKey }: { columnKey: string }) => {
@@ -234,12 +240,52 @@ export default function CompaniesPage() {
   }
 
   const handleMarkDNC = (company: Company | null) => {
-    // This would be replaced by actual API call
-    if (company) {
-      alert(`Marked ${company.name} as DNC (Do Not Contact)`)
-    } else {
+    if (!company) {
       alert('DNC List uploaded successfully (Simulation)')
       setIsDncDialogOpen(false)
+      return
+    }
+
+    setCompanyToMarkDNC(company)
+    setDncReasonInput('')
+    setIsDncConfirmOpen(true)
+  }
+
+  const confirmMarkDNC = async () => {
+    if (!companyToMarkDNC) return
+
+    const isDNC = !companyToMarkDNC.is_dnc
+    const reason = isDNC ? (dncReasonInput || 'Marked as DNC') : null
+
+    setIsSubmittingDNC(true)
+    try {
+      const response = await fetch(`/api/companies/${companyToMarkDNC.id}/dnc`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          is_dnc: isDNC,
+          dnc_reason: reason
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update DNC status')
+      }
+
+      // Invalidate queries to refetch fresh data
+      await queryClient.invalidateQueries({ queryKey: ['companies'] })
+
+      // Close dialog
+      setIsDncConfirmOpen(false)
+      setCompanyToMarkDNC(null)
+      setDncReasonInput('')
+    } catch (error) {
+      console.error('Error updating DNC status:', error)
+      alert('Failed to update DNC status. Please try again.')
+    } finally {
+      setIsSubmittingDNC(false)
     }
   }
 
@@ -254,6 +300,9 @@ export default function CompaniesPage() {
             <span className="font-medium text-[#004565]">{company.name}</span>
             {company.icp_qualified && (
               <Badge variant="outline" className="ml-2 text-[10px] h-5 border-green-500 text-green-700 bg-green-50">ICP</Badge>
+            )}
+            {company.is_dnc && (
+              <Badge variant="outline" className="ml-2 text-[10px] h-5 border-red-500 text-red-700 bg-red-50">DNC</Badge>
             )}
           </div>
         )
@@ -373,11 +422,11 @@ export default function CompaniesPage() {
           {/* Search Bar */}
           <div className="relative mr-2">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#004565]/50" />
-            <Input 
-                placeholder="Lookup company..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 pr-24 w-[250px] bg-white/80 border-[#004565]/20 focus:border-[#004565] focus:ring-[#004565]"
+            <Input
+              placeholder="Lookup company..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9 pr-24 w-[250px] bg-white/80 border-[#004565]/20 focus:border-[#004565] focus:ring-[#004565]"
             />
             {searchTerm && searchTerm !== debouncedSearch && (
               <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-[#004565]/60 font-medium">
@@ -441,9 +490,14 @@ export default function CompaniesPage() {
                             <Building2 className="h-5 w-5" />
                             {company.name}
                           </CardTitle>
-                          {company.icp_qualified && (
-                            <Badge variant="success">ICP Qualified</Badge>
-                          )}
+                          <div className="flex flex-col gap-1">
+                            {company.icp_qualified && (
+                              <Badge variant="success">ICP Qualified</Badge>
+                            )}
+                            {company.is_dnc && (
+                              <Badge variant="outline" className="border-red-500 text-red-700 bg-red-50">DNC</Badge>
+                            )}
+                          </div>
                         </div>
                         <CardDescription>
                           {company.industry_type}
@@ -467,7 +521,13 @@ export default function CompaniesPage() {
                             <Button variant="outline" className="flex-1" onClick={() => handleViewDetails(company)}>
                               View
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleMarkDNC(company)} className="text-red-400 hover:text-red-600 hover:bg-red-50" title="Mark as DNC">
+                            <Button
+                              variant={company.is_dnc ? "destructive" : "ghost"}
+                              size="icon"
+                              onClick={() => handleMarkDNC(company)}
+                              className={company.is_dnc ? "bg-red-600 hover:bg-red-700" : "text-red-400 hover:text-red-600 hover:bg-red-50"}
+                              title={company.is_dnc ? "Remove from DNC" : "Mark as DNC"}
+                            >
                               <Ban className="h-4 w-4" />
                             </Button>
                           </div>
@@ -510,8 +570,8 @@ export default function CompaniesPage() {
                         {columnOrder.map((columnId) => (
                           <SortableHeader key={columnId} id={columnId} onClick={() => handleSort(columnId)}>
                             <div className="flex items-center">
-                                {allColumns[columnId as keyof typeof allColumns].label}
-                                <SortIcon columnKey={columnId} />
+                              {allColumns[columnId as keyof typeof allColumns].label}
+                              <SortIcon columnKey={columnId} />
                             </div>
                           </SortableHeader>
                         ))}
@@ -647,8 +707,8 @@ export default function CompaniesPage() {
             </div>
             <div className="space-y-2">
               <Label>Or add manually</Label>
-              <Input 
-                placeholder="Enter email or domain to block..." 
+              <Input
+                placeholder="Enter email or domain to block..."
                 value={dncInput}
                 onChange={(e) => setDncInput(e.target.value)}
               />
@@ -657,6 +717,70 @@ export default function CompaniesPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDncDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleManualDNCSubmit}>Process List</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* DNC Confirmation Dialog */}
+      <Dialog open={isDncConfirmOpen} onOpenChange={setIsDncConfirmOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Ban className="h-5 w-5 text-red-600" />
+              {companyToMarkDNC?.is_dnc ? 'Remove from DNC List' : 'Mark as DNC'}
+            </DialogTitle>
+            <DialogDescription>
+              {companyToMarkDNC?.is_dnc
+                ? `Are you sure you want to remove "${companyToMarkDNC?.name}" from the Do Not Contact list?`
+                : `Are you sure you want to mark "${companyToMarkDNC?.name}" as Do Not Contact?`
+              }
+            </DialogDescription>
+          </DialogHeader>
+
+          {!companyToMarkDNC?.is_dnc && (
+            <div className="space-y-2 py-4">
+              <Label htmlFor="dnc-reason">Reason (optional)</Label>
+              <Input
+                id="dnc-reason"
+                placeholder="e.g., Requested removal, Competitor, etc."
+                value={dncReasonInput}
+                onChange={(e) => setDncReasonInput(e.target.value)}
+                className="border-[#004565]/20 focus:border-[#004565]"
+                disabled={isSubmittingDNC}
+              />
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDncConfirmOpen(false)
+                setCompanyToMarkDNC(null)
+                setDncReasonInput('')
+              }}
+              disabled={isSubmittingDNC}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={companyToMarkDNC?.is_dnc ? "default" : "destructive"}
+              onClick={confirmMarkDNC}
+              className={companyToMarkDNC?.is_dnc ? "" : "bg-red-600 hover:bg-red-700"}
+              disabled={isSubmittingDNC}
+            >
+              {isSubmittingDNC ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {companyToMarkDNC?.is_dnc ? 'Removing...' : 'Marking...'}
+                </>
+              ) : (
+                <>
+                  <Ban className="h-4 w-4 mr-2" />
+                  {companyToMarkDNC?.is_dnc ? 'Remove from DNC' : 'Mark as DNC'}
+                </>
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
