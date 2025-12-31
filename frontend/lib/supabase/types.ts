@@ -46,6 +46,9 @@ export interface Database {
           twitter_url: string | null
           address: string | null
           short_description: string | null
+          is_dnc: boolean
+          dnc_reason: string | null
+          dnc_date: string | null
           created_at: string
           updated_at: string
         }
@@ -67,6 +70,9 @@ export interface Database {
           twitter_url?: string | null
           address?: string | null
           short_description?: string | null
+          is_dnc?: boolean
+          dnc_reason?: string | null
+          dnc_date?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -88,6 +94,9 @@ export interface Database {
           twitter_url?: string | null
           address?: string | null
           short_description?: string | null
+          is_dnc?: boolean
+          dnc_reason?: string | null
+          dnc_date?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -103,6 +112,9 @@ export interface Database {
           job_title: string | null
           is_decision_maker: boolean
           department: string | null
+          is_dnc: boolean
+          dnc_reason: string | null
+          dnc_date: string | null
           created_at: string
           updated_at: string
         }
@@ -116,6 +128,9 @@ export interface Database {
           job_title?: string | null
           is_decision_maker?: boolean
           department?: string | null
+          is_dnc?: boolean
+          dnc_reason?: string | null
+          dnc_date?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -129,6 +144,9 @@ export interface Database {
           job_title?: string | null
           is_decision_maker?: boolean
           department?: string | null
+          is_dnc?: boolean
+          dnc_reason?: string | null
+          dnc_date?: string | null
           created_at?: string
           updated_at?: string
         }
