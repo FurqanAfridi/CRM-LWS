@@ -25,11 +25,15 @@ export function CalendarIntegration() {
     if (match) {
       const username = match[1]
       const eventType = match[2] || ''
+      
+      // Add timezone parameter for Central Time (USA)
+      const embedUrl = `${urlWithoutParams}?primary_color=004565&text_color=004565&timezone=America/Chicago`
+      
       return {
         username,
         eventType,
         displayName: eventType ? `${username}/${eventType}` : username,
-        embedUrl: urlWithoutParams, // Use URL without query params for iframe
+        embedUrl, // Use URL with timezone parameter for iframe
         fullUrl: CALENDLY_URL, // Use full URL for external link
       }
     }
@@ -38,7 +42,7 @@ export function CalendarIntegration() {
       username: 'calendly',
       eventType: '',
       displayName: 'Calendly Schedule',
-      embedUrl: urlWithoutParams,
+      embedUrl: `${urlWithoutParams}?primary_color=004565&text_color=004565&timezone=America/Chicago`,
       fullUrl: CALENDLY_URL,
     }
   }, [])
