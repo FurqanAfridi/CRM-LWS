@@ -128,7 +128,7 @@ export default function DNCPage() {
             <Ban className="h-8 w-8 text-red-600" />
             DNC List
           </h1>
-          <p className="text-[#004565]/70 mt-1">Manage Do Not Contact entries for companies and contacts</p>
+          <p className="text-[#004565]/70 mt-1">Manage Do Not Contact entries for companies and contacts. Leads associated with DNC entities are automatically excluded from Qualified Leads and Outreach tabs.</p>
         </div>
         <Button
           onClick={() => setIsAddDialogOpen(true)}
