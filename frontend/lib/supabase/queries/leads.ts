@@ -14,14 +14,24 @@ export interface LeadFilters {
 }
 
 export async function getLeads(filters?: LeadFilters) {
-  // First, get all leads with filters applied
+  // First, fetch all DNC company IDs and contact IDs
+  const { data: dncCompanies } = await supabase
+    .from('companies')
+    .select('id')
+    .eq('is_dnc', true)
+
+  const { data: dncContacts } = await supabase
+    .from('contacts')
+    .select('id')
+    .eq('is_dnc', true)
+
+  const dncCompanyIds = new Set((dncCompanies || []).map((c: any) => c.id))
+  const dncContactIds = new Set((dncContacts || []).map((c: any) => c.id))
+
+  // Now fetch leads with filters
   let query = supabase
     .from('leads')
-    .select(`
-      *,
-      companies!leads_company_id_fkey(is_dnc),
-      contacts!leads_contact_id_fkey(is_dnc)
-    `)
+    .select('*')
     .order('created_at', { ascending: false })
     .limit(1000) // Add reasonable limit to prevent fetching too many records
 
@@ -46,19 +56,15 @@ export async function getLeads(filters?: LeadFilters) {
   if (error) throw error
 
   // Filter out leads where the company or contact is marked as DNC
-  const filteredData = (data || []).filter((lead: any) => {
-    const companyIsDnc = lead.companies?.is_dnc === true
-    const contactIsDnc = lead.contacts?.is_dnc === true
+  const filteredData = (data || []).filter((lead: Lead) => {
+    const companyIsDnc = lead.company_id && dncCompanyIds.has(lead.company_id)
+    const contactIsDnc = lead.contact_id && dncContactIds.has(lead.contact_id)
 
     // Exclude lead if either company or contact is DNC
     return !companyIsDnc && !contactIsDnc
   })
 
-  // Remove the joined data before returning
-  return filteredData.map((lead: any) => {
-    const { companies, contacts, ...leadData } = lead
-    return leadData as Lead
-  })
+  return filteredData as Lead[]
 }
 
 export async function getLeadById(id: string) {
