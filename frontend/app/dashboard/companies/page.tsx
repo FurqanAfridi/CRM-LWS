@@ -76,7 +76,6 @@ export default function CompaniesPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
-  const [hideDncCompanies, setHideDncCompanies] = useState(false) // Toggle to hide DNC companies
   const hasLoadedData = useRef(false)
 
   // Debounce search term to avoid excessive API calls
@@ -96,7 +95,7 @@ export default function CompaniesPage() {
     isLoading,
     isFetching,
     error
-  } = useCompanies({ search: debouncedSearch, exclude_dnc: hideDncCompanies })
+  } = useCompanies({ search: debouncedSearch, exclude_dnc: true }) // Always exclude DNC companies
 
   // Track if we've ever loaded data
   useEffect(() => {
@@ -455,19 +454,6 @@ export default function CompaniesPage() {
               <List className="h-4 w-4" />
             </Button>
           </div>
-
-          <Button
-            variant={hideDncCompanies ? 'default' : 'outline'}
-            onClick={() => setHideDncCompanies(!hideDncCompanies)}
-            className={hideDncCompanies 
-              ? 'bg-[#004565] text-white hover:bg-[#004565]/90' 
-              : 'border-[#004565]/30 text-[#004565] hover:bg-[#004565]/10'
-            }
-            title={hideDncCompanies ? 'Show DNC companies' : 'Hide DNC companies'}
-          >
-            <Ban className={`h-4 w-4 mr-2 ${hideDncCompanies ? 'text-white' : 'text-red-600'}`} />
-            {hideDncCompanies ? 'DNC Hidden' : 'Show All'}
-          </Button>
 
           <Button
             variant="outline"
