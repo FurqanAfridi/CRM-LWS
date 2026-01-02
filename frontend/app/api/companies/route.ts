@@ -29,6 +29,7 @@ export async function GET(request: Request) {
         const industry_type = searchParams.get('industry_type')
         const icp_qualified = searchParams.get('icp_qualified')
         const search = searchParams.get('search')
+        const exclude_dnc = searchParams.get('exclude_dnc') // Optional: exclude DNC companies
 
         const from = offset
         const to = from + limit - 1
@@ -46,6 +47,11 @@ export async function GET(request: Request) {
         if (icp_qualified !== null && icp_qualified !== undefined) {
             const isTrue = icp_qualified === 'true'
             query = query.eq('icp_qualified', isTrue)
+        }
+
+        // Optionally exclude DNC companies from results
+        if (exclude_dnc === 'true') {
+            query = query.eq('is_dnc', false)
         }
 
         // Add search functionality - search across name and address only

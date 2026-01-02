@@ -95,7 +95,7 @@ export default function CompaniesPage() {
     isLoading,
     isFetching,
     error
-  } = useCompanies({ search: debouncedSearch })
+  } = useCompanies({ search: debouncedSearch, exclude_dnc: true }) // Always exclude DNC companies
 
   // Track if we've ever loaded data
   useEffect(() => {

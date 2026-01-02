@@ -14,9 +14,14 @@ export interface LeadFilters {
 }
 
 export async function getLeads(filters?: LeadFilters) {
+  // First, get all leads with filters applied
   let query = supabase
     .from('leads')
-    .select('*')
+    .select(`
+      *,
+      companies!leads_company_id_fkey(is_dnc),
+      contacts!leads_contact_id_fkey(is_dnc)
+    `)
     .order('created_at', { ascending: false })
     .limit(1000) // Add reasonable limit to prevent fetching too many records
 
@@ -39,7 +44,21 @@ export async function getLeads(filters?: LeadFilters) {
   const { data, error } = await query
 
   if (error) throw error
-  return (data || []) as Lead[]
+
+  // Filter out leads where the company or contact is marked as DNC
+  const filteredData = (data || []).filter((lead: any) => {
+    const companyIsDnc = lead.companies?.is_dnc === true
+    const contactIsDnc = lead.contacts?.is_dnc === true
+
+    // Exclude lead if either company or contact is DNC
+    return !companyIsDnc && !contactIsDnc
+  })
+
+  // Remove the joined data before returning
+  return filteredData.map((lead: any) => {
+    const { companies, contacts, ...leadData } = lead
+    return leadData as Lead
+  })
 }
 
 export async function getLeadById(id: string) {
