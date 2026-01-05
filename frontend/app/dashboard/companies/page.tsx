@@ -14,7 +14,7 @@ import Link from 'next/link'
 import {
   Building2, Plus, MapPin, Users, DollarSign, Globe, Linkedin, Facebook, Twitter,
   FileText, Loader2, LayoutGrid, List, Upload, Ban, CheckCircle2, MoreHorizontal,
-  Search, ArrowUp, ArrowDown
+  Search, ArrowUp, ArrowDown, FileSpreadsheet, AlertCircle
 } from 'lucide-react'
 import { Database } from '@/lib/supabase/types'
 import {
@@ -25,6 +25,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   DndContext,
   closestCenter,
@@ -119,6 +121,13 @@ export default function CompaniesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [fileHeaders, setFileHeaders] = useState<string[]>([])
+  const [filePreview, setFilePreview] = useState<string[][]>([])
+  const [showColumnMapping, setShowColumnMapping] = useState(false)
+  const [selectedValueColumn, setSelectedValueColumn] = useState<string>('')
+  const [selectedReasonColumn, setSelectedReasonColumn] = useState<string>('none')
+  const [bulkUploadType, setBulkUploadType] = useState<'company' | 'contact'>('company')
+  const [isProcessing, setIsProcessing] = useState(false)
 
   const { data: totalCount, isLoading: isCountLoading } = useCompaniesCount()
 
@@ -157,10 +166,78 @@ export default function CompaniesPage() {
     setIsDncDialogOpen(false)
   }
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const parseCSV = (text: string): string[][] => {
+    const lines = text.split('\n').filter(line => line.trim())
+    return lines.map(line => {
+      const result: string[] = []
+      let current = ''
+      let inQuotes = false
+      
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i]
+        
+        if (char === '"') {
+          inQuotes = !inQuotes
+        } else if (char === ',' && !inQuotes) {
+          result.push(current.trim())
+          current = ''
+        } else {
+          current += char
+        }
+      }
+      result.push(current.trim())
+      
+      return result.map(field => field.replace(/^["']|["']$/g, '').trim())
+    })
+  }
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
       setUploadedFile(file)
+      
+      try {
+        const text = await file.text()
+        const rows = parseCSV(text)
+        
+        if (rows.length < 2) {
+          toast.error('File must contain at least a header row and one data row')
+          setUploadedFile(null)
+          return
+        }
+        
+        // Extract headers and preview data
+        setFileHeaders(rows[0])
+        setFilePreview(rows.slice(1, 6)) // Show first 5 data rows
+        setShowColumnMapping(true)
+        
+        // Auto-detect common column names
+        const headers = rows[0].map(h => h.toLowerCase())
+        const domainIndex = headers.findIndex(h => 
+          h.includes('domain') || h.includes('website') || h.includes('company')
+        )
+        const emailIndex = headers.findIndex(h => h.includes('email'))
+        const reasonIndex = headers.findIndex(h => 
+          h.includes('reason') || h.includes('note') || h.includes('comment')
+        )
+        
+        if (domainIndex !== -1) {
+          setSelectedValueColumn(domainIndex.toString())
+          setBulkUploadType('company')
+        } else if (emailIndex !== -1) {
+          setSelectedValueColumn(emailIndex.toString())
+          setBulkUploadType('contact')
+        }
+        
+        if (reasonIndex !== -1) {
+          setSelectedReasonColumn(reasonIndex.toString())
+        }
+        
+      } catch (error) {
+        console.error('Error parsing file:', error)
+        toast.error('Failed to parse file. Please ensure it\'s a valid CSV file.')
+        setUploadedFile(null)
+      }
     }
   }
 
@@ -174,7 +251,7 @@ export default function CompaniesPage() {
     setIsDragging(false)
   }
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
 
@@ -189,6 +266,48 @@ export default function CompaniesPage() {
 
       if (validTypes.includes(file.type) || file.name.endsWith('.csv') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
         setUploadedFile(file)
+        
+        // Parse the file
+        try {
+          const text = await file.text()
+          const rows = parseCSV(text)
+          
+          if (rows.length < 2) {
+            toast.error('File must contain at least a header row and one data row')
+            setUploadedFile(null)
+            return
+          }
+          
+          setFileHeaders(rows[0])
+          setFilePreview(rows.slice(1, 6))
+          setShowColumnMapping(true)
+          
+          // Auto-detect columns
+          const headers = rows[0].map(h => h.toLowerCase())
+          const domainIndex = headers.findIndex(h => 
+            h.includes('domain') || h.includes('website') || h.includes('company')
+          )
+          const emailIndex = headers.findIndex(h => h.includes('email'))
+          const reasonIndex = headers.findIndex(h => 
+            h.includes('reason') || h.includes('note') || h.includes('comment')
+          )
+          
+          if (domainIndex !== -1) {
+            setSelectedValueColumn(domainIndex.toString())
+            setBulkUploadType('company')
+          } else if (emailIndex !== -1) {
+            setSelectedValueColumn(emailIndex.toString())
+            setBulkUploadType('contact')
+          }
+          
+          if (reasonIndex !== -1) {
+            setSelectedReasonColumn(reasonIndex.toString())
+          }
+        } catch (error) {
+          console.error('Error parsing file:', error)
+          toast.error('Failed to parse file. Please ensure it\'s a valid CSV file.')
+          setUploadedFile(null)
+        }
       } else {
         toast.error('Please upload a CSV or Excel file')
       }
@@ -201,16 +320,67 @@ export default function CompaniesPage() {
       return
     }
 
-    // For now, show a simulation message
-    // In a real implementation, you would:
-    // 1. Parse the CSV/Excel file
-    // 2. Send the data to an API endpoint
-    // 3. Process the bulk upload on the backend
-    toast.info(`File "${uploadedFile.name}" ready for processing`, {
-      description: 'This feature requires backend implementation to parse and process the file.'
-    })
-    setUploadedFile(null)
-    setIsDncDialogOpen(false)
+    if (!selectedValueColumn) {
+      toast.error('Please select the column containing domains or emails')
+      return
+    }
+
+    setIsProcessing(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', uploadedFile)
+      formData.append('type', bulkUploadType)
+      formData.append('valueColumn', selectedValueColumn)
+      if (selectedReasonColumn && selectedReasonColumn !== 'none') {
+        formData.append('reasonColumn', selectedReasonColumn)
+      }
+
+      const response = await fetch('/api/dnc/bulk-upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to process bulk upload')
+      }
+
+      // Show results
+      const { results } = data
+      const successCount = results.success.length
+      const failedCount = results.failed.length
+
+      if (successCount > 0) {
+        toast.success(`Successfully added ${successCount} ${bulkUploadType === 'company' ? 'companies' : 'contacts'} to DNC list`, {
+          description: failedCount > 0 ? `${failedCount} entries failed` : undefined
+        })
+      }
+
+      if (failedCount > 0) {
+        console.log('Failed entries:', results.failed)
+        toast.warning(`${failedCount} entries could not be processed`, {
+          description: 'Check console for details'
+        })
+      }
+
+      // Reset and close
+      setUploadedFile(null)
+      setShowColumnMapping(false)
+      setFileHeaders([])
+      setFilePreview([])
+      setSelectedValueColumn('')
+      setSelectedReasonColumn('none')
+      setIsDncDialogOpen(false)
+
+      // Refresh the companies list
+      await queryClient.invalidateQueries({ queryKey: ['companies'] })
+    } catch (error: any) {
+      console.error('Error processing bulk upload:', error)
+      toast.error(error.message || 'Failed to process bulk upload. Please try again.')
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   const handleSort = (key: string) => {
@@ -751,64 +921,213 @@ export default function CompaniesPage() {
 
       {/* Upload DNC List Dialog */}
       <Dialog open={isDncDialogOpen} onOpenChange={setIsDncDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Upload DNC List</DialogTitle>
             <DialogDescription>
-              Upload a CSV or Excel file containing companies or contacts to exclude from outreach.
+              Upload a CSV file containing companies or contacts to exclude from outreach.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div
-              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${isDragging
-                ? 'border-[#004565] bg-[#004565]/5'
-                : uploadedFile
-                  ? 'border-green-500 bg-green-50'
-                  : 'border-gray-300 hover:bg-gray-50'
-                }`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className={`h-10 w-10 mx-auto mb-2 ${uploadedFile ? 'text-green-600' : 'text-gray-400'}`} />
-              {uploadedFile ? (
-                <>
-                  <p className="text-sm text-green-700 font-medium">{uploadedFile.name}</p>
-                  <p className="text-xs text-green-600 mt-1">
-                    {(uploadedFile.size / 1024).toFixed(2)} KB - Click to change
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
-                  <p className="text-xs text-gray-400 mt-1">CSV, XLS, XLSX up to 10MB</p>
-                </>
-              )}
-              <Input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                accept=".csv,.xls,.xlsx"
-                onChange={handleFileSelect}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Or add manually</Label>
-              <Input
-                placeholder="Enter email or domain to block..."
-                value={dncInput}
-                onChange={(e) => setDncInput(e.target.value)}
-              />
-            </div>
+            {!showColumnMapping ? (
+              <div
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${isDragging
+                  ? 'border-[#004565] bg-[#004565]/5'
+                  : uploadedFile
+                    ? 'border-green-500 bg-green-50'
+                    : 'border-gray-300 hover:bg-gray-50'
+                  }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className={`h-10 w-10 mx-auto mb-2 ${uploadedFile ? 'text-green-600' : 'text-gray-400'}`} />
+                {uploadedFile ? (
+                  <>
+                    <p className="text-sm text-green-700 font-medium">{uploadedFile.name}</p>
+                    <p className="text-xs text-green-600 mt-1">
+                      {(uploadedFile.size / 1024).toFixed(2)} KB - Click to change
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
+                    <p className="text-xs text-gray-400 mt-1">CSV files containing domains or emails</p>
+                  </>
+                )}
+                <Input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept=".csv"
+                  onChange={handleFileSelect}
+                />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <Alert>
+                  <FileSpreadsheet className="h-4 w-4" />
+                  <AlertDescription>
+                    File loaded: <strong>{uploadedFile?.name}</strong> ({filePreview.length} rows shown)
+                  </AlertDescription>
+                </Alert>
+
+                {/* Type Selection */}
+                <div className="space-y-2">
+                  <Label>Upload Type</Label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={bulkUploadType === 'company'}
+                        onChange={() => setBulkUploadType('company')}
+                        className="text-[#004565]"
+                      />
+                      <Building2 className="h-4 w-4" />
+                      Company Domains
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={bulkUploadType === 'contact'}
+                        onChange={() => setBulkUploadType('contact')}
+                        className="text-[#004565]"
+                      />
+                      <Users className="h-4 w-4" />
+                      Contact Emails
+                    </label>
+                  </div>
+                </div>
+
+                {/* Column Mapping */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>
+                      {bulkUploadType === 'company' ? 'Domain' : 'Email'} Column *
+                    </Label>
+                    <Select value={selectedValueColumn} onValueChange={setSelectedValueColumn}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select column..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fileHeaders.map((header, index) => (
+                          <SelectItem key={index} value={index.toString()}>
+                            {header || `Column ${index + 1}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Reason Column (Optional)</Label>
+                    <Select value={selectedReasonColumn} onValueChange={setSelectedReasonColumn}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select column..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {fileHeaders.map((header, index) => (
+                          <SelectItem key={index} value={index.toString()}>
+                            {header || `Column ${index + 1}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Preview Table */}
+                <div className="space-y-2">
+                  <Label>Data Preview</Label>
+                  <div className="border rounded-md overflow-hidden">
+                    <div className="overflow-x-auto max-h-48">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-50 border-b sticky top-0">
+                          <tr>
+                            {fileHeaders.map((header, index) => (
+                              <th
+                                key={index}
+                                className={`px-3 py-2 text-left font-medium ${
+                                  index.toString() === selectedValueColumn
+                                    ? 'bg-blue-100 text-blue-900'
+                                    : index.toString() === selectedReasonColumn
+                                    ? 'bg-green-100 text-green-900'
+                                    : 'text-gray-700'
+                                }`}
+                              >
+                                {header || `Col ${index + 1}`}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {filePreview.map((row, rowIndex) => (
+                            <tr key={rowIndex} className="hover:bg-gray-50">
+                              {row.map((cell, cellIndex) => (
+                                <td
+                                  key={cellIndex}
+                                  className={`px-3 py-2 ${
+                                    cellIndex.toString() === selectedValueColumn
+                                      ? 'bg-blue-50'
+                                      : cellIndex.toString() === selectedReasonColumn
+                                      ? 'bg-green-50'
+                                      : ''
+                                  }`}
+                                >
+                                  {cell || '—'}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowColumnMapping(false)
+                    setUploadedFile(null)
+                    setFileHeaders([])
+                    setFilePreview([])
+                    setSelectedValueColumn('')
+                    setSelectedReasonColumn('none')
+                  }}
+                  className="w-full"
+                >
+                  Choose Different File
+                </Button>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => {
               setIsDncDialogOpen(false)
               setUploadedFile(null)
-            }}>Cancel</Button>
-            <Button onClick={uploadedFile ? handleBulkUpload : handleManualDNCSubmit}>
-              {uploadedFile ? 'Process File' : 'Add Manually'}
+              setShowColumnMapping(false)
+              setFileHeaders([])
+              setFilePreview([])
+              setSelectedValueColumn('')
+              setSelectedReasonColumn('none')
+            }} disabled={isProcessing}>Cancel</Button>
+            <Button
+              onClick={showColumnMapping ? handleBulkUpload : () => {}}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={isProcessing || (showColumnMapping && !selectedValueColumn) || !showColumnMapping}
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                'Process List'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
