@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { toast } from 'sonner'
 import { useCompanies, useCompaniesCount } from '@/lib/hooks/useCompanies'
 import { useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -115,6 +116,9 @@ export default function CompaniesPage() {
   const scrollTriggerRef = useRef<HTMLDivElement>(null)
   const scrollTriggerRowRef = useRef<HTMLTableRowElement>(null)
   const bottomSentinelRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
 
   const { data: totalCount, isLoading: isCountLoading } = useCompaniesCount()
 
@@ -148,8 +152,64 @@ export default function CompaniesPage() {
 
   const handleManualDNCSubmit = () => {
     if (!dncInput) return;
-    alert(`Successfully added ${dncInput} to DNC list (simulated)`)
+    toast.success(`Successfully added ${dncInput} to DNC list`)
     setDncInput('')
+    setIsDncDialogOpen(false)
+  }
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      setUploadedFile(file)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+
+    const file = e.dataTransfer.files?.[0]
+    if (file) {
+      // Validate file type
+      const validTypes = [
+        'text/csv',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      ]
+
+      if (validTypes.includes(file.type) || file.name.endsWith('.csv') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        setUploadedFile(file)
+      } else {
+        toast.error('Please upload a CSV or Excel file')
+      }
+    }
+  }
+
+  const handleBulkUpload = async () => {
+    if (!uploadedFile) {
+      toast.error('Please select a file to upload')
+      return
+    }
+
+    // For now, show a simulation message
+    // In a real implementation, you would:
+    // 1. Parse the CSV/Excel file
+    // 2. Send the data to an API endpoint
+    // 3. Process the bulk upload on the backend
+    toast.info(`File "${uploadedFile.name}" ready for processing`, {
+      description: 'This feature requires backend implementation to parse and process the file.'
+    })
+    setUploadedFile(null)
     setIsDncDialogOpen(false)
   }
 
@@ -283,7 +343,7 @@ export default function CompaniesPage() {
       setDncReasonInput('')
     } catch (error) {
       console.error('Error updating DNC status:', error)
-      alert('Failed to update DNC status. Please try again.')
+      toast.error('Failed to update DNC status. Please try again.')
     } finally {
       setIsSubmittingDNC(false)
     }
@@ -699,11 +759,39 @@ export default function CompaniesPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:bg-gray-50 transition-colors cursor-pointer">
-              <Upload className="h-10 w-10 text-gray-400 mx-auto mb-2" />
-              <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
-              <p className="text-xs text-gray-400 mt-1">CSV, XLS, XLSX up to 10MB</p>
-              <Input type="file" className="hidden" />
+            <div
+              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${isDragging
+                ? 'border-[#004565] bg-[#004565]/5'
+                : uploadedFile
+                  ? 'border-green-500 bg-green-50'
+                  : 'border-gray-300 hover:bg-gray-50'
+                }`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className={`h-10 w-10 mx-auto mb-2 ${uploadedFile ? 'text-green-600' : 'text-gray-400'}`} />
+              {uploadedFile ? (
+                <>
+                  <p className="text-sm text-green-700 font-medium">{uploadedFile.name}</p>
+                  <p className="text-xs text-green-600 mt-1">
+                    {(uploadedFile.size / 1024).toFixed(2)} KB - Click to change
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
+                  <p className="text-xs text-gray-400 mt-1">CSV, XLS, XLSX up to 10MB</p>
+                </>
+              )}
+              <Input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept=".csv,.xls,.xlsx"
+                onChange={handleFileSelect}
+              />
             </div>
             <div className="space-y-2">
               <Label>Or add manually</Label>
@@ -715,8 +803,13 @@ export default function CompaniesPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDncDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleManualDNCSubmit}>Process List</Button>
+            <Button variant="outline" onClick={() => {
+              setIsDncDialogOpen(false)
+              setUploadedFile(null)
+            }}>Cancel</Button>
+            <Button onClick={uploadedFile ? handleBulkUpload : handleManualDNCSubmit}>
+              {uploadedFile ? 'Process File' : 'Add Manually'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

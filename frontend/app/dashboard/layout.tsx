@@ -1,6 +1,7 @@
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
 import { AuthGuard } from '@/components/auth/AuthGuard'
+import { Toaster } from '@/components/ui/toaster'
 
 export default function DashboardLayout({
   children,
@@ -26,6 +27,7 @@ export default function DashboardLayout({
           </main>
         </div>
       </div>
+      <Toaster />
     </AuthGuard>
   )
 }

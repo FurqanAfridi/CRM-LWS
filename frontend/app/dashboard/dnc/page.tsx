@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,6 +28,9 @@ export default function DNCPage() {
   const [itemToRemove, setItemToRemove] = useState<DNCEntry | null>(null)
   const [addMode, setAddMode] = useState<'single' | 'list'>('single')
   const [newEntry, setNewEntry] = useState({ type: 'company', value: '', reason: '' })
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
 
   // Fetch DNC list from API
   useEffect(() => {
@@ -44,7 +48,7 @@ export default function DNCPage() {
       setDncList(data)
     } catch (error) {
       console.error('Error fetching DNC list:', error)
-      alert('Failed to load DNC list. Please refresh the page.')
+      toast.error('Failed to load DNC list. Please refresh the page.')
     } finally {
       setIsLoading(false)
     }
@@ -56,17 +60,63 @@ export default function DNCPage() {
     item.reason.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const handleAddSubmit = () => {
+  const handleAddSubmit = async () => {
     if (addMode === 'single') {
-      if (!newEntry.value) return
+      if (!newEntry.value) {
+        toast.error('Please enter a domain or email')
+        return
+      }
 
-      // This would need to be implemented with proper API calls
-      alert('Adding single entries is not yet implemented. Please use the Companies or Contacts page to mark items as DNC.')
-      setIsAddDialogOpen(false)
+      setIsLoading(true)
+      try {
+        const response = await fetch('/api/dnc/add', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: newEntry.type,
+            value: newEntry.value,
+            reason: newEntry.reason || 'Added manually from DNC list'
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to add to DNC list')
+        }
+
+        // Show success message
+        if (newEntry.type === 'company') {
+          toast.success(`Successfully added ${data.count} company(ies) to DNC list`, {
+            description: data.companies.join(', ')
+          })
+        } else {
+          toast.success(`Successfully added ${data.count} contact(s) to DNC list`, {
+            description: data.contacts.join(', ')
+          })
+        }
+
+        // Reset form and close dialog
+        setNewEntry({ type: 'company', value: '', reason: '' })
+        setIsAddDialogOpen(false)
+
+        // Refresh the DNC list
+        fetchDNCList()
+      } catch (error: any) {
+        console.error('Error adding to DNC list:', error)
+        toast.error(error.message || 'Failed to add to DNC list. Please try again.')
+      } finally {
+        setIsLoading(false)
+      }
     } else {
-      // Simulation for list upload
-      alert("List processed and added to DNC (Simulation)")
-      setIsAddDialogOpen(false)
+      // Bulk upload handled by handleBulkUpload
+      if (!uploadedFile) {
+        toast.error('Please select a file to upload')
+        return
+      }
+      handleBulkUpload()
     }
   }
 
@@ -104,8 +154,64 @@ export default function DNCPage() {
       fetchDNCList()
     } catch (error) {
       console.error('Error removing from DNC list:', error)
-      alert('Failed to remove from DNC list. Please try again.')
+      toast.error('Failed to remove from DNC list. Please try again.')
     }
+  }
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      setUploadedFile(file)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+
+    const file = e.dataTransfer.files?.[0]
+    if (file) {
+      // Validate file type
+      const validTypes = [
+        'text/csv',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      ]
+
+      if (validTypes.includes(file.type) || file.name.endsWith('.csv') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        setUploadedFile(file)
+      } else {
+        toast.error('Please upload a CSV or Excel file')
+      }
+    }
+  }
+
+  const handleBulkUpload = async () => {
+    if (!uploadedFile) {
+      toast.error('Please select a file to upload')
+      return
+    }
+
+    // For now, show a simulation message
+    // In a real implementation, you would:
+    // 1. Parse the CSV/Excel file
+    // 2. Send the data to an API endpoint
+    // 3. Process the bulk upload on the backend
+    toast.info(`File "${uploadedFile.name}" ready for processing`, {
+      description: 'This feature requires backend implementation to parse and process the file.'
+    })
+    setUploadedFile(null)
+    setIsAddDialogOpen(false)
   }
 
 
@@ -277,19 +383,61 @@ export default function DNCPage() {
             </TabsContent>
 
             <TabsContent value="list" className="py-4">
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:bg-gray-50 transition-colors cursor-pointer">
-                <Upload className="h-10 w-10 text-gray-400 mx-auto mb-2" />
-                <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
-                <p className="text-xs text-gray-400 mt-1">CSV, XLS, XLSX containing domains or emails</p>
-                <Input type="file" className="hidden" />
+              <div
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${isDragging
+                  ? 'border-[#004565] bg-[#004565]/5'
+                  : uploadedFile
+                    ? 'border-green-500 bg-green-50'
+                    : 'border-gray-300 hover:bg-gray-50'
+                  }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className={`h-10 w-10 mx-auto mb-2 ${uploadedFile ? 'text-green-600' : 'text-gray-400'}`} />
+                {uploadedFile ? (
+                  <>
+                    <p className="text-sm text-green-700 font-medium">{uploadedFile.name}</p>
+                    <p className="text-xs text-green-600 mt-1">
+                      {(uploadedFile.size / 1024).toFixed(2)} KB - Click to change
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
+                    <p className="text-xs text-gray-400 mt-1">CSV, XLS, XLSX containing domains or emails</p>
+                  </>
+                )}
+                <Input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept=".csv,.xls,.xlsx"
+                  onChange={handleFileSelect}
+                />
               </div>
             </TabsContent>
           </Tabs>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleAddSubmit} className="bg-red-600 hover:bg-red-700 text-white">
-              {addMode === 'single' ? 'Add Entry' : 'Process List'}
+            <Button variant="outline" onClick={() => {
+              setIsAddDialogOpen(false)
+              setUploadedFile(null)
+            }} disabled={isLoading}>Cancel</Button>
+            <Button
+              onClick={uploadedFile ? handleBulkUpload : handleAddSubmit}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {uploadedFile ? 'Processing...' : 'Adding...'}
+                </>
+              ) : (
+                uploadedFile ? 'Process File' : (addMode === 'single' ? 'Add Entry' : 'Upload File')
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
