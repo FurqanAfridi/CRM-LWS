@@ -23,62 +23,33 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url)
         const type = searchParams.get('type') // 'company', 'contact', or 'all'
 
-        const dncEntries: any[] = []
+        // Build query for dnc_list table
+        let query = supabase
+            .from('dnc_list')
+            .select('id, type, value, reason, created_at')
+            .order('created_at', { ascending: false })
 
-        // Fetch DNC companies
-        if (type === 'company' || type === 'all' || !type) {
-            const { data: companies, error: companiesError } = await supabase
-                .from('companies')
-                .select('id, name, is_dnc, dnc_reason, dnc_date')
-                .eq('is_dnc', true)
-                .order('dnc_date', { ascending: false })
-
-            if (companiesError) {
-                return NextResponse.json({ error: companiesError.message }, { status: 500 })
-            }
-
-            if (companies) {
-                dncEntries.push(...companies.map(c => ({
-                    id: c.id,
-                    type: 'company',
-                    value: c.name,
-                    reason: c.dnc_reason || 'No reason provided',
-                    added_at: c.dnc_date ? new Date(c.dnc_date).toISOString().split('T')[0] : 'Unknown'
-                })))
-            }
+        // Filter by type if specified
+        if (type && type !== 'all') {
+            query = query.eq('type', type)
         }
 
-        // Fetch DNC contacts
-        if (type === 'contact' || type === 'all' || !type) {
-            const { data: contacts, error: contactsError } = await supabase
-                .from('contacts')
-                .select('id, first_name, last_name, email, is_dnc, dnc_reason, dnc_date')
-                .eq('is_dnc', true)
-                .order('dnc_date', { ascending: false })
+        const { data: dncEntries, error } = await query
 
-            if (contactsError) {
-                return NextResponse.json({ error: contactsError.message }, { status: 500 })
-            }
-
-            if (contacts) {
-                dncEntries.push(...contacts.map(c => ({
-                    id: c.id,
-                    type: 'contact',
-                    value: c.email || `${c.first_name || ''} ${c.last_name || ''}`.trim() || 'Unknown',
-                    reason: c.dnc_reason || 'No reason provided',
-                    added_at: c.dnc_date ? new Date(c.dnc_date).toISOString().split('T')[0] : 'Unknown'
-                })))
-            }
+        if (error) {
+            return NextResponse.json({ error: error.message }, { status: 500 })
         }
 
-        // Sort by date (most recent first)
-        dncEntries.sort((a, b) => {
-            if (a.added_at === 'Unknown') return 1
-            if (b.added_at === 'Unknown') return -1
-            return new Date(b.added_at).getTime() - new Date(a.added_at).getTime()
-        })
+        // Format the response
+        const formattedEntries = (dncEntries || []).map(entry => ({
+            id: entry.id,
+            type: entry.type,
+            value: entry.value,
+            reason: entry.reason || 'No reason provided',
+            added_at: entry.created_at ? new Date(entry.created_at).toISOString().split('T')[0] : 'Unknown'
+        }))
 
-        return NextResponse.json(dncEntries)
+        return NextResponse.json(formattedEntries)
     } catch (err: any) {
         return NextResponse.json(
             { error: err.message || 'Internal Server Error' },

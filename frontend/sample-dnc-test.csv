@@ -1,0 +1,6 @@
+domain,reason
+example-test-1.com,Test entry - does not exist in database
+example-test-2.com,Test entry - does not exist in database
+nonexistent-company.com,Testing DNC list independent storage
+fake-domain-123.com,Should appear in DNC list even without matching company
+test-upload-domain.com,Bulk upload test
