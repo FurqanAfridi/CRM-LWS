@@ -47,92 +47,112 @@ function parseCSV(text: string): string[][] {
 export async function POST(request: Request) {
     try {
         const supabase = getSupabaseClient()
-        const formData = await request.formData()
 
-        const file = formData.get('file') as File
-        const type = formData.get('type') as string // 'company' or 'contact'
-        const valueColumn = formData.get('valueColumn') as string // Column index for domain/email
-        const reasonColumn = formData.get('reasonColumn') as string | null // Optional reason column
+        // Handle both FormData (file) and JSON (batches)
+        const contentType = request.headers.get('content-type') || ''
 
-        if (!file) {
-            return NextResponse.json(
-                { error: 'No file provided' },
-                { status: 400 }
-            )
+        let dataRows: string[][] = []
+        let type = 'company'
+        let valueColIndex = 0
+        let reasonColIndex: number | null = null
+
+        if (contentType.includes('application/json')) {
+            const body = await request.json()
+            dataRows = body.rows
+            type = body.type
+            valueColIndex = body.valueColumn || 0
+            reasonColIndex = body.reasonColumn !== undefined ? body.reasonColumn : null
+        } else {
+            const formData = await request.formData()
+            const file = formData.get('file') as File
+            type = formData.get('type') as string // 'company' or 'contact'
+            const valueColumn = formData.get('valueColumn') as string // Column index
+            const reasonColumn = formData.get('reasonColumn') as string | null
+
+            if (!file) {
+                return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+            }
+
+            const text = await file.text()
+            const rows = parseCSV(text)
+            if (rows.length < 2) {
+                return NextResponse.json({ error: 'File empty or missing headers' }, { status: 400 })
+            }
+            dataRows = rows.slice(1) // Skip header
+            valueColIndex = parseInt(valueColumn)
+            reasonColIndex = reasonColumn ? parseInt(reasonColumn) : null
         }
 
-        if (!type || !valueColumn) {
-            return NextResponse.json(
-                { error: 'Type and value column are required' },
-                { status: 400 }
-            )
+        const stats = {
+            total: dataRows.length,
+            added: 0,
+            duplicates: 0,
+            failed: 0,
+            scrubbed: 0,
+            details: [] as any[]
         }
 
-        // Read file content
-        const text = await file.text()
-
-        // Parse CSV (we'll handle Excel conversion on frontend using a library)
-        const rows = parseCSV(text)
-
-        if (rows.length < 2) {
-            return NextResponse.json(
-                { error: 'File must contain at least a header row and one data row' },
-                { status: 400 }
-            )
-        }
-
-        // Skip header row
-        const dataRows = rows.slice(1)
-        const valueColIndex = parseInt(valueColumn)
-        const reasonColIndex = reasonColumn ? parseInt(reasonColumn) : null
-
-        const results = {
-            success: [] as string[],
-            failed: [] as { value: string; reason: string }[],
-            total: dataRows.length
-        }
-
-        // Process each row
+        // Process in small batches or individually with robust error handling
         for (const row of dataRows) {
-            const value = row[valueColIndex]?.trim()
-            if (!value) continue
+            const rawValue = row[valueColIndex]?.trim()
+            if (!rawValue) {
+                stats.total--
+                continue
+            }
 
             const reason = reasonColIndex !== null && row[reasonColIndex]
                 ? row[reasonColIndex].trim()
                 : 'Added via bulk upload'
 
             try {
+                let value = rawValue.toLowerCase()
                 if (type === 'company') {
-                    // Extract domain
-                    let domain = value.toLowerCase()
-                    domain = domain.replace(/^https?:\/\//, '')
-                    domain = domain.replace(/^www\./, '')
-                    domain = domain.split('/')[0]
+                    value = value.replace(/^https?:\/\//, '')
+                    value = value.replace(/^www\./, '')
+                    value = value.split('/')[0]
+                }
 
-                    // Insert into dnc_list table (this will always succeed)
-                    const { error: insertError } = await supabase
-                        .from('dnc_list')
-                        .upsert({
-                            type: 'company',
-                            value: domain,
-                            reason: reason
-                        }, {
-                            onConflict: 'type,value',
-                            ignoreDuplicates: false
-                        })
+                // Check if already exists in dnc_list
+                const { data: existing } = await supabase
+                    .from('dnc_list')
+                    .select('id')
+                    .eq('type', type)
+                    .eq('value', value)
+                    .single()
 
-                    if (insertError) throw insertError
+                if (existing) {
+                    stats.duplicates++
+                    continue
+                }
 
-                    // Also try to find and update matching companies
+                // Insert into dnc_list
+                const { error: insertError } = await supabase
+                    .from('dnc_list')
+                    .insert({
+                        type,
+                        value,
+                        reason
+                    })
+
+                if (insertError) {
+                    if (insertError.code === '23505') {
+                        stats.duplicates++
+                        continue
+                    }
+                    throw insertError
+                }
+
+                stats.added++
+
+                // SCRUBBING: Mark matching records in main tables
+                if (type === 'company') {
                     const { data: companies } = await supabase
                         .from('companies')
-                        .select('id, name, website')
-                        .or(`website.ilike.%${domain}%`)
-                        .limit(10)
+                        .select('id')
+                        .or(`website.ilike.%${value}%`)
 
                     if (companies && companies.length > 0) {
-                        // Mark as DNC
-                        await supabase
+                        const { error: updateError } = await supabase
                             .from('companies')
                             .update({
                                 is_dnc: true,
@@ -141,38 +161,16 @@ export async function POST(request: Request) {
                             })
                             .in('id', companies.map(c => c.id))
 
-                        results.success.push(`${domain} (${companies.length} companies updated)`)
-                    } else {
-                        results.success.push(`${domain} (added to DNC list)`)
+                        if (!updateError) stats.scrubbed += companies.length
                     }
-
-                } else if (type === 'contact') {
-                    const email = value.toLowerCase()
-
-                    // Insert into dnc_list table (this will always succeed)
-                    const { error: insertError } = await supabase
-                        .from('dnc_list')
-                        .upsert({
-                            type: 'contact',
-                            value: email,
-                            reason: reason
-                        }, {
-                            onConflict: 'type,value',
-                            ignoreDuplicates: false
-                        })
-
-                    if (insertError) throw insertError
-
-                    // Also try to find and update matching contacts
+                } else {
                     const { data: contacts } = await supabase
                         .from('contacts')
-                        .select('id, email, first_name, last_name')
-                        .ilike('email', email)
-                        .limit(10)
+                        .select('id')
+                        .ilike('email', value)
 
                     if (contacts && contacts.length > 0) {
-                        // Mark as DNC
-                        await supabase
+                        const { error: updateError } = await supabase
                             .from('contacts')
                             .update({
                                 is_dnc: true,
@@ -181,22 +179,19 @@ export async function POST(request: Request) {
                             })
                             .in('id', contacts.map(c => c.id))
 
-                        results.success.push(`${email} (${contacts.length} contacts updated)`)
-                    } else {
-                        results.success.push(`${email} (added to DNC list)`)
+                        if (!updateError) stats.scrubbed += contacts.length
                     }
                 }
+
             } catch (err: any) {
-                results.failed.push({
-                    value,
-                    reason: err.message || 'Unknown error'
-                })
+                stats.failed++
+                stats.details.push({ value: rawValue, error: err.message })
             }
         }
 
         return NextResponse.json({
             success: true,
-            results
+            stats
         })
 
     } catch (err: any) {

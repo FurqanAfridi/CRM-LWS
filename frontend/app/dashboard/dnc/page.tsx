@@ -40,6 +40,15 @@ export default function DNCPage() {
   const [selectedReasonColumn, setSelectedReasonColumn] = useState<string>('none')
   const [bulkUploadType, setBulkUploadType] = useState<'company' | 'contact'>('company')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadStats, setUploadStats] = useState({
+    total: 0,
+    processed: 0,
+    added: 0,
+    duplicates: 0,
+    failed: 0,
+    scrubbed: 0
+  })
 
   // Fetch DNC list from API
   useEffect(() => {
@@ -319,43 +328,79 @@ export default function DNCPage() {
     }
 
     setIsProcessing(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', uploadedFile)
-      formData.append('type', bulkUploadType)
-      formData.append('valueColumn', selectedValueColumn)
-      if (selectedReasonColumn && selectedReasonColumn !== 'none') {
-        formData.append('reasonColumn', selectedReasonColumn)
-      }
+    setUploadProgress(0)
 
-      const response = await fetch('/api/dnc/bulk-upload', {
-        method: 'POST',
-        body: formData,
+    try {
+      const text = await uploadedFile.text()
+      const allRows = parseCSV(text)
+      const dataRows = allRows.slice(1) // Skip header
+      const totalRows = dataRows.length
+
+      setUploadStats({
+        total: totalRows,
+        processed: 0,
+        added: 0,
+        duplicates: 0,
+        failed: 0,
+        scrubbed: 0
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to process bulk upload')
+      const CHUNK_SIZE = 20
+      const chunks = []
+      for (let i = 0; i < dataRows.length; i += CHUNK_SIZE) {
+        chunks.push(dataRows.slice(i, i + CHUNK_SIZE))
       }
 
-      // Show results
-      const { results } = data
-      const successCount = results.success.length
-      const failedCount = results.failed.length
+      let currentProcessed = 0
+      let currentAdded = 0
+      let currentDuplicates = 0
+      let currentFailed = 0
+      let currentScrubbed = 0
 
-      if (successCount > 0) {
-        toast.success(`Successfully added ${successCount} ${bulkUploadType === 'company' ? 'companies' : 'contacts'} to DNC list`, {
-          description: failedCount > 0 ? `${failedCount} entries failed` : undefined
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i]
+        const response = await fetch('/api/dnc/bulk-upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            rows: chunk,
+            type: bulkUploadType,
+            valueColumn: parseInt(selectedValueColumn),
+            reasonColumn: selectedReasonColumn !== 'none' ? parseInt(selectedReasonColumn) : null
+          }),
         })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Failed to process batch')
+        }
+
+        const data = await response.json()
+        const { stats } = data
+
+        currentProcessed += chunk.length
+        currentAdded += stats.added
+        currentDuplicates += stats.duplicates
+        currentFailed += stats.failed
+        currentScrubbed += stats.scrubbed
+
+        setUploadStats({
+          total: totalRows,
+          processed: currentProcessed,
+          added: currentAdded,
+          duplicates: currentDuplicates,
+          failed: currentFailed,
+          scrubbed: currentScrubbed
+        })
+
+        setUploadProgress(Math.round((currentProcessed / totalRows) * 100))
       }
 
-      if (failedCount > 0) {
-        console.log('Failed entries:', results.failed)
-        toast.warning(`${failedCount} entries could not be processed`, {
-          description: 'Check console for details'
-        })
-      }
+      toast.success(`Bulk upload complete!`, {
+        description: `Added ${currentAdded} new, ${currentDuplicates} duplicates, ${currentFailed} failed. ${currentScrubbed} matching records scrubbed.`
+      })
 
       // Reset and close
       setUploadedFile(null)
@@ -666,10 +711,10 @@ export default function DNCPage() {
                                 <th
                                   key={index}
                                   className={`px-3 py-2 text-left font-medium ${index.toString() === selectedValueColumn
-                                      ? 'bg-blue-100 text-blue-900'
-                                      : index.toString() === selectedReasonColumn
-                                        ? 'bg-green-100 text-green-900'
-                                        : 'text-gray-700'
+                                    ? 'bg-blue-100 text-blue-900'
+                                    : index.toString() === selectedReasonColumn
+                                      ? 'bg-green-100 text-green-900'
+                                      : 'text-gray-700'
                                     }`}
                                 >
                                   {header || `Col ${index + 1}`}
@@ -684,10 +729,10 @@ export default function DNCPage() {
                                   <td
                                     key={cellIndex}
                                     className={`px-3 py-2 ${cellIndex.toString() === selectedValueColumn
-                                        ? 'bg-blue-50'
-                                        : cellIndex.toString() === selectedReasonColumn
-                                          ? 'bg-green-50'
-                                          : ''
+                                      ? 'bg-blue-50'
+                                      : cellIndex.toString() === selectedReasonColumn
+                                        ? 'bg-green-50'
+                                        : ''
                                       }`}
                                   >
                                     {cell || '—'}
@@ -713,9 +758,43 @@ export default function DNCPage() {
                       setSelectedReasonColumn('none')
                     }}
                     className="w-full"
+                    disabled={isProcessing}
                   >
                     Choose Different File
                   </Button>
+
+                  {isProcessing && (
+                    <div className="space-y-2 pt-2 border-t">
+                      <div className="flex justify-between text-xs font-medium">
+                        <span>Progress</span>
+                        <span>{uploadProgress}% ({uploadStats.processed}/{uploadStats.total})</span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-blue-600 h-full transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[10px]">
+                        <div className="bg-green-50 p-2 rounded border border-green-100">
+                          <span className="text-green-600 block font-bold uppercase">Added</span>
+                          <span className="text-green-700 text-lg">{uploadStats.added}</span>
+                        </div>
+                        <div className="bg-orange-50 p-2 rounded border border-orange-100">
+                          <span className="text-orange-600 block font-bold uppercase">Duplicates</span>
+                          <span className="text-orange-700 text-lg">{uploadStats.duplicates}</span>
+                        </div>
+                        <div className="bg-blue-50 p-2 rounded border border-blue-100">
+                          <span className="text-blue-600 block font-bold uppercase">Scrubbed</span>
+                          <span className="text-blue-700 text-lg">{uploadStats.scrubbed}</span>
+                        </div>
+                        <div className="bg-red-50 p-2 rounded border border-red-100">
+                          <span className="text-red-600 block font-bold uppercase">Failed</span>
+                          <span className="text-red-700 text-lg">{uploadStats.failed}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </TabsContent>
@@ -737,10 +816,10 @@ export default function DNCPage() {
               disabled={isLoading || isProcessing || (showColumnMapping && !selectedValueColumn)}
             >
               {(isLoading || isProcessing) ? (
-                <>
+                <div className="flex items-center">
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  {showColumnMapping ? 'Processing...' : 'Adding...'}
-                </>
+                  {isProcessing ? `Processing (${uploadProgress}%)` : 'Adding...'}
+                </div>
               ) : (
                 showColumnMapping ? 'Process List' : (addMode === 'single' ? 'Add Entry' : 'Upload File')
               )}

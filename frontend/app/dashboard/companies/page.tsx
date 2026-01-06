@@ -128,6 +128,15 @@ export default function CompaniesPage() {
   const [selectedReasonColumn, setSelectedReasonColumn] = useState<string>('none')
   const [bulkUploadType, setBulkUploadType] = useState<'company' | 'contact'>('company')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadStats, setUploadStats] = useState({
+    total: 0,
+    processed: 0,
+    added: 0,
+    duplicates: 0,
+    failed: 0,
+    scrubbed: 0
+  })
 
   const { data: totalCount, isLoading: isCountLoading } = useCompaniesCount()
 
@@ -172,10 +181,10 @@ export default function CompaniesPage() {
       const result: string[] = []
       let current = ''
       let inQuotes = false
-      
+
       for (let i = 0; i < line.length; i++) {
         const char = line[i]
-        
+
         if (char === '"') {
           inQuotes = !inQuotes
         } else if (char === ',' && !inQuotes) {
@@ -186,7 +195,7 @@ export default function CompaniesPage() {
         }
       }
       result.push(current.trim())
-      
+
       return result.map(field => field.replace(/^["']|["']$/g, '').trim())
     })
   }
@@ -195,32 +204,32 @@ export default function CompaniesPage() {
     const file = event.target.files?.[0]
     if (file) {
       setUploadedFile(file)
-      
+
       try {
         const text = await file.text()
         const rows = parseCSV(text)
-        
+
         if (rows.length < 2) {
           toast.error('File must contain at least a header row and one data row')
           setUploadedFile(null)
           return
         }
-        
+
         // Extract headers and preview data
         setFileHeaders(rows[0])
         setFilePreview(rows.slice(1, 6)) // Show first 5 data rows
         setShowColumnMapping(true)
-        
+
         // Auto-detect common column names
         const headers = rows[0].map(h => h.toLowerCase())
-        const domainIndex = headers.findIndex(h => 
+        const domainIndex = headers.findIndex(h =>
           h.includes('domain') || h.includes('website') || h.includes('company')
         )
         const emailIndex = headers.findIndex(h => h.includes('email'))
-        const reasonIndex = headers.findIndex(h => 
+        const reasonIndex = headers.findIndex(h =>
           h.includes('reason') || h.includes('note') || h.includes('comment')
         )
-        
+
         if (domainIndex !== -1) {
           setSelectedValueColumn(domainIndex.toString())
           setBulkUploadType('company')
@@ -228,11 +237,11 @@ export default function CompaniesPage() {
           setSelectedValueColumn(emailIndex.toString())
           setBulkUploadType('contact')
         }
-        
+
         if (reasonIndex !== -1) {
           setSelectedReasonColumn(reasonIndex.toString())
         }
-        
+
       } catch (error) {
         console.error('Error parsing file:', error)
         toast.error('Failed to parse file. Please ensure it\'s a valid CSV file.')
@@ -266,32 +275,32 @@ export default function CompaniesPage() {
 
       if (validTypes.includes(file.type) || file.name.endsWith('.csv') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
         setUploadedFile(file)
-        
+
         // Parse the file
         try {
           const text = await file.text()
           const rows = parseCSV(text)
-          
+
           if (rows.length < 2) {
             toast.error('File must contain at least a header row and one data row')
             setUploadedFile(null)
             return
           }
-          
+
           setFileHeaders(rows[0])
           setFilePreview(rows.slice(1, 6))
           setShowColumnMapping(true)
-          
+
           // Auto-detect columns
           const headers = rows[0].map(h => h.toLowerCase())
-          const domainIndex = headers.findIndex(h => 
+          const domainIndex = headers.findIndex(h =>
             h.includes('domain') || h.includes('website') || h.includes('company')
           )
           const emailIndex = headers.findIndex(h => h.includes('email'))
-          const reasonIndex = headers.findIndex(h => 
+          const reasonIndex = headers.findIndex(h =>
             h.includes('reason') || h.includes('note') || h.includes('comment')
           )
-          
+
           if (domainIndex !== -1) {
             setSelectedValueColumn(domainIndex.toString())
             setBulkUploadType('company')
@@ -299,7 +308,7 @@ export default function CompaniesPage() {
             setSelectedValueColumn(emailIndex.toString())
             setBulkUploadType('contact')
           }
-          
+
           if (reasonIndex !== -1) {
             setSelectedReasonColumn(reasonIndex.toString())
           }
@@ -326,43 +335,79 @@ export default function CompaniesPage() {
     }
 
     setIsProcessing(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', uploadedFile)
-      formData.append('type', bulkUploadType)
-      formData.append('valueColumn', selectedValueColumn)
-      if (selectedReasonColumn && selectedReasonColumn !== 'none') {
-        formData.append('reasonColumn', selectedReasonColumn)
-      }
+    setUploadProgress(0)
 
-      const response = await fetch('/api/dnc/bulk-upload', {
-        method: 'POST',
-        body: formData,
+    try {
+      const text = await uploadedFile.text()
+      const allRows = parseCSV(text)
+      const dataRows = allRows.slice(1) // Skip header
+      const totalRows = dataRows.length
+
+      setUploadStats({
+        total: totalRows,
+        processed: 0,
+        added: 0,
+        duplicates: 0,
+        failed: 0,
+        scrubbed: 0
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to process bulk upload')
+      const CHUNK_SIZE = 20
+      const chunks = []
+      for (let i = 0; i < dataRows.length; i += CHUNK_SIZE) {
+        chunks.push(dataRows.slice(i, i + CHUNK_SIZE))
       }
 
-      // Show results
-      const { results } = data
-      const successCount = results.success.length
-      const failedCount = results.failed.length
+      let currentProcessed = 0
+      let currentAdded = 0
+      let currentDuplicates = 0
+      let currentFailed = 0
+      let currentScrubbed = 0
 
-      if (successCount > 0) {
-        toast.success(`Successfully added ${successCount} ${bulkUploadType === 'company' ? 'companies' : 'contacts'} to DNC list`, {
-          description: failedCount > 0 ? `${failedCount} entries failed` : undefined
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i]
+        const response = await fetch('/api/dnc/bulk-upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            rows: chunk,
+            type: bulkUploadType,
+            valueColumn: parseInt(selectedValueColumn),
+            reasonColumn: selectedReasonColumn !== 'none' ? parseInt(selectedReasonColumn) : null
+          }),
         })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Failed to process batch')
+        }
+
+        const data = await response.json()
+        const { stats } = data
+
+        currentProcessed += chunk.length
+        currentAdded += stats.added
+        currentDuplicates += stats.duplicates
+        currentFailed += stats.failed
+        currentScrubbed += stats.scrubbed
+
+        setUploadStats({
+          total: totalRows,
+          processed: currentProcessed,
+          added: currentAdded,
+          duplicates: currentDuplicates,
+          failed: currentFailed,
+          scrubbed: currentScrubbed
+        })
+
+        setUploadProgress(Math.round((currentProcessed / totalRows) * 100))
       }
 
-      if (failedCount > 0) {
-        console.log('Failed entries:', results.failed)
-        toast.warning(`${failedCount} entries could not be processed`, {
-          description: 'Check console for details'
-        })
-      }
+      toast.success(`Bulk upload complete!`, {
+        description: `Added ${currentAdded} new, ${currentDuplicates} duplicates, ${currentFailed} failed. ${currentScrubbed} matching records scrubbed.`
+      })
 
       // Reset and close
       setUploadedFile(null)
@@ -1049,13 +1094,12 @@ export default function CompaniesPage() {
                             {fileHeaders.map((header, index) => (
                               <th
                                 key={index}
-                                className={`px-3 py-2 text-left font-medium ${
-                                  index.toString() === selectedValueColumn
+                                className={`px-3 py-2 text-left font-medium ${index.toString() === selectedValueColumn
                                     ? 'bg-blue-100 text-blue-900'
                                     : index.toString() === selectedReasonColumn
-                                    ? 'bg-green-100 text-green-900'
-                                    : 'text-gray-700'
-                                }`}
+                                      ? 'bg-green-100 text-green-900'
+                                      : 'text-gray-700'
+                                  }`}
                               >
                                 {header || `Col ${index + 1}`}
                               </th>
@@ -1068,13 +1112,12 @@ export default function CompaniesPage() {
                               {row.map((cell, cellIndex) => (
                                 <td
                                   key={cellIndex}
-                                  className={`px-3 py-2 ${
-                                    cellIndex.toString() === selectedValueColumn
+                                  className={`px-3 py-2 ${cellIndex.toString() === selectedValueColumn
                                       ? 'bg-blue-50'
                                       : cellIndex.toString() === selectedReasonColumn
-                                      ? 'bg-green-50'
-                                      : ''
-                                  }`}
+                                        ? 'bg-green-50'
+                                        : ''
+                                    }`}
                                 >
                                   {cell || '—'}
                                 </td>
@@ -1099,9 +1142,43 @@ export default function CompaniesPage() {
                     setSelectedReasonColumn('none')
                   }}
                   className="w-full"
+                  disabled={isProcessing}
                 >
                   Choose Different File
                 </Button>
+
+                {isProcessing && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <div className="flex justify-between text-xs font-medium">
+                      <span>Progress</span>
+                      <span>{uploadProgress}% ({uploadStats.processed}/{uploadStats.total})</span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-blue-600 h-full transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                      <div className="bg-green-50 p-2 rounded border border-green-100">
+                        <span className="text-green-600 block font-bold uppercase">Added</span>
+                        <span className="text-green-700 text-lg">{uploadStats.added}</span>
+                      </div>
+                      <div className="bg-orange-50 p-2 rounded border border-orange-100">
+                        <span className="text-orange-600 block font-bold uppercase">Duplicates</span>
+                        <span className="text-orange-700 text-lg">{uploadStats.duplicates}</span>
+                      </div>
+                      <div className="bg-blue-50 p-2 rounded border border-blue-100">
+                        <span className="text-blue-600 block font-bold uppercase">Scrubbed</span>
+                        <span className="text-blue-700 text-lg">{uploadStats.scrubbed}</span>
+                      </div>
+                      <div className="bg-red-50 p-2 rounded border border-red-100">
+                        <span className="text-red-600 block font-bold uppercase">Failed</span>
+                        <span className="text-red-700 text-lg">{uploadStats.failed}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1116,15 +1193,15 @@ export default function CompaniesPage() {
               setSelectedReasonColumn('none')
             }} disabled={isProcessing}>Cancel</Button>
             <Button
-              onClick={showColumnMapping ? handleBulkUpload : () => {}}
+              onClick={showColumnMapping ? handleBulkUpload : () => { }}
               className="bg-red-600 hover:bg-red-700 text-white"
               disabled={isProcessing || (showColumnMapping && !selectedValueColumn) || !showColumnMapping}
             >
-              {isProcessing ? (
-                <>
+              {(isLoading || isProcessing) ? (
+                <div className="flex items-center">
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Processing...
-                </>
+                  {isProcessing ? `Processing (${uploadProgress}%)` : 'Processing...'}
+                </div>
               ) : (
                 'Process List'
               )}
