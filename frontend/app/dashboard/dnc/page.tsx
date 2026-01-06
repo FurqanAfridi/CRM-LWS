@@ -10,8 +10,26 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Ban, Plus, Trash2, Search, Upload, Building2, Users, Loader2, FileSpreadsheet, AlertCircle } from 'lucide-react'
+import { Ban, Plus, Trash2, Search, Upload, Building2, Users, Loader2, FileSpreadsheet, AlertCircle, ArrowUp, ArrowDown } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  horizontalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+
 
 type DNCEntry = {
   id: string
@@ -19,6 +37,46 @@ type DNCEntry = {
   value: string
   reason: string
   added_at: string
+  company_name?: string
+}
+
+// Sortable Header Component
+function SortableHeader({ id, children, onClick }: { id: string; children: React.ReactNode; onClick?: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 1000 : 0,
+  }
+
+  return (
+    <th
+      ref={setNodeRef}
+      style={style}
+      className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider bg-white relative group border-b border-[#004565]/10 whitespace-nowrap select-none"
+    >
+      <div className="flex items-center gap-2">
+        <div 
+          {...attributes}
+          {...listeners}
+          className="cursor-move touch-none mr-1 opacity-50 hover:opacity-100"
+          title="Drag to reorder"
+        >
+          ⋮⋮
+        </div>
+        <div 
+          className="flex items-center gap-1 cursor-pointer flex-1"
+          onClick={(e) => {
+            e.stopPropagation()
+            onClick?.()
+          }}
+        >
+          {children}
+        </div>
+      </div>
+    </th>
+  )
 }
 
 export default function DNCPage() {
@@ -49,6 +107,65 @@ export default function DNCPage() {
     failed: 0,
     scrubbed: 0
   })
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
+  const [activeTab, setActiveTab] = useState('all')
+
+  // Column definitions
+  const allColumns = {
+    hash: { label: '#' },
+    type: { label: 'Type' },
+    value: { label: 'Value (Domain/Email)' },
+    company_name: { label: 'Company Name' },
+    reason: { label: 'Reason' },
+    added_at: { label: 'Date Added' },
+    actions: { label: 'Actions' },
+  }
+
+  const [columnOrder, setColumnOrder] = useState<string[]>([
+    'hash', 'type', 'value', 'company_name', 'reason', 'added_at', 'actions'
+  ])
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (over && active.id !== over.id) {
+      setColumnOrder((items) => {
+        const oldIndex = items.indexOf(active.id as string)
+        const newIndex = items.indexOf(over.id as string)
+        return arrayMove(items, oldIndex, newIndex)
+      })
+    }
+  }
+
+  const handleSort = (key: string) => {
+    setSortConfig(current => ({
+      key,
+      direction: current?.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+    }))
+  }
+
+  const SortIcon = ({ columnKey }: { columnKey: string }) => {
+    if (sortConfig?.key !== columnKey) {
+      return <ArrowUp className="h-3 w-3 ml-1 opacity-30" />
+    }
+    return sortConfig.direction === 'asc' ? (
+      <ArrowUp className="h-3 w-3 ml-1" />
+    ) : (
+      <ArrowDown className="h-3 w-3 ml-1" />
+    )
+  }
+
 
   // Fetch DNC list from API
   useEffect(() => {
@@ -72,11 +189,90 @@ export default function DNCPage() {
     }
   }
 
-  // Filter logic
-  const filteredList = dncList.filter(item =>
-    item.value.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.reason.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  // Filter and sort logic
+  const filteredAndSortedList = (() => {
+    // First filter
+    let filtered = dncList.filter(item =>
+      item.value.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.reason.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.company_name && item.company_name.toLowerCase().includes(searchTerm.toLowerCase()))
+    )
+
+    // Then sort
+    if (sortConfig) {
+      // Skip sorting for non-sortable columns
+      if (sortConfig.key === 'actions') {
+        return filtered
+      }
+
+      filtered = [...filtered].sort((a, b) => {
+        let aValue: any
+        let bValue: any
+
+        // Handle special columns
+        if (sortConfig.key === 'hash') {
+          // For hash, we want to sort by the original order (id or added_at)
+          aValue = a.added_at
+          bValue = b.added_at
+        } else {
+          aValue = (a as any)[sortConfig.key]
+          bValue = (b as any)[sortConfig.key]
+        }
+
+        if (aValue == null && bValue == null) return 0
+        if (aValue == null) return 1
+        if (bValue == null) return -1
+
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue
+        }
+
+        const aStr = String(aValue).toLowerCase()
+        const bStr = String(bValue).toLowerCase()
+        return sortConfig.direction === 'asc'
+          ? aStr.localeCompare(bStr)
+          : bStr.localeCompare(aStr)
+      })
+    }
+
+    return filtered
+  })()
+
+  const renderCell = (columnId: string, item: DNCEntry, index: number) => {
+    switch (columnId) {
+      case 'hash':
+        return <span className="text-[#004565]/70 font-mono text-xs">{index + 1}</span>
+      case 'type':
+        return (
+          <Badge variant="outline" className={item.type === 'company' ? 'border-blue-200 text-blue-700 bg-blue-50' : 'border-purple-200 text-purple-700 bg-purple-50'}>
+            {item.type === 'company' ? <Building2 className="h-3 w-3 mr-1" /> : <Users className="h-3 w-3 mr-1" />}
+            {item.type === 'company' ? 'Company' : 'Contact'}
+          </Badge>
+        )
+      case 'value':
+        return <span className="font-medium text-gray-900">{item.value}</span>
+      case 'company_name':
+        return <span className="text-sm text-gray-700">{item.company_name || '—'}</span>
+      case 'reason':
+        return <span className="text-sm text-gray-500">{item.reason}</span>
+      case 'added_at':
+        return <span className="text-sm text-gray-500">{item.added_at}</span>
+      case 'actions':
+        return (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => handleRemove(item)}
+            className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-100"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )
+      default:
+        return null
+    }
+  }
+
 
   const handleAddSubmit = async () => {
     if (addMode === 'single') {
@@ -434,98 +630,113 @@ export default function DNCPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-4xl font-bold text-[#004565] flex items-center gap-2">
+    <div className="space-y-6 h-full flex flex-col">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 flex-shrink-0">
+        <div className="relative">
+          <h1 className="text-4xl font-bold text-[#004565] flex items-baseline gap-3">
             <Ban className="h-8 w-8 text-red-600" />
             DNC List
+            <div className="flex items-center">
+              <span className="text-2xl text-[#004565]/60 font-medium">
+                ({filteredAndSortedList.length})
+              </span>
+              <span className="ml-2 text-sm text-[#004565]/40 font-normal">
+                {searchTerm ? 'Search Results' : 'Total Entries'}
+              </span>
+            </div>
           </h1>
-          <p className="text-[#004565]/70 mt-1">Manage Do Not Contact entries for companies and contacts. Leads associated with DNC entities are automatically excluded from Qualified Leads and Outreach tabs.</p>
+          <div className="absolute -top-2 -left-2 w-24 h-24 bg-red-500/20 rounded-full blur-2xl -z-10"></div>
         </div>
-        <Button
-          onClick={() => setIsAddDialogOpen(true)}
-          className="bg-red-600 hover:bg-red-700 text-white shadow-lg"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add to DNC
-        </Button>
-      </div>
 
-      <Card className="border-[#004565]/20 shadow-lg bg-white/90 backdrop-blur-sm">
-        <CardHeader className="pb-4">
-          <div className="relative">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Search Bar */}
+          <div className="relative mr-2">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#004565]/50" />
             <Input
               placeholder="Search DNC list..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 bg-white border-[#004565]/20 focus:border-[#004565]"
+              className="pl-9 pr-24 w-[250px] bg-white/80 border-[#004565]/20 focus:border-[#004565] focus:ring-[#004565]"
             />
           </div>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="all" className="w-full">
-            <TabsList className="mb-4">
-              <TabsTrigger value="all">All Entries</TabsTrigger>
-              <TabsTrigger value="company">Companies</TabsTrigger>
-              <TabsTrigger value="contact">Contacts</TabsTrigger>
-            </TabsList>
 
-            {['all', 'company', 'contact'].map(tabValue => (
-              <TabsContent key={tabValue} value={tabValue} className="mt-0">
-                <div className="rounded-md border border-[#004565]/10 overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead className="bg-[#004565]/5 border-b border-[#004565]/10">
-                      <tr>
-                        <th className="px-4 py-3 text-left font-medium text-[#004565]">Type</th>
-                        <th className="px-4 py-3 text-left font-medium text-[#004565]">Value (Domain/Email)</th>
-                        <th className="px-4 py-3 text-left font-medium text-[#004565]">Reason</th>
-                        <th className="px-4 py-3 text-left font-medium text-[#004565]">Date Added</th>
-                        <th className="px-4 py-3 text-right font-medium text-[#004565]">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#004565]/10 bg-white">
-                      {filteredList
-                        .filter(item => tabValue === 'all' || item.type === tabValue)
-                        .map((item) => (
-                          <tr key={item.id} className="hover:bg-red-50/30 transition-colors group">
-                            <td className="px-4 py-3">
-                              <Badge variant="outline" className={item.type === 'company' ? 'border-blue-200 text-blue-700 bg-blue-50' : 'border-purple-200 text-purple-700 bg-purple-50'}>
-                                {item.type === 'company' ? <Building2 className="h-3 w-3 mr-1" /> : <Users className="h-3 w-3 mr-1" />}
-                                {item.type === 'company' ? 'Company' : 'Contact'}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-3 font-medium text-gray-900">{item.value}</td>
-                            <td className="px-4 py-3 text-gray-500">{item.reason}</td>
-                            <td className="px-4 py-3 text-gray-500">{item.added_at}</td>
-                            <td className="px-4 py-3 text-right">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleRemove(item)}
-                                className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-100"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </td>
-                          </tr>
+          <Button
+            onClick={() => setIsAddDialogOpen(true)}
+            className="bg-red-600 hover:bg-red-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add to DNC
+          </Button>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 min-h-0">
+        <Card className="border-[#004565]/20 shadow-lg bg-white/90 backdrop-blur-sm overflow-hidden flex flex-col h-full">
+          <CardHeader className="pb-4 flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-xl font-semibold text-[#004565]">DNC List</CardTitle>
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-auto">
+                <TabsList>
+                  <TabsTrigger value="all">All Entries</TabsTrigger>
+                  <TabsTrigger value="company">Companies</TabsTrigger>
+                  <TabsTrigger value="contact">Contacts</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+          </CardHeader>
+
+          <CardContent className="flex-1 overflow-hidden p-0">
+            <div className="overflow-auto h-full w-full" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <table className="w-full border-collapse">
+                  <thead className="sticky top-0 z-20 shadow-sm bg-white">
+                    <tr className="border-b border-[#004565]/20">
+                      <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
+                        {columnOrder.map((columnId) => (
+                          <SortableHeader key={columnId} id={columnId} onClick={() => handleSort(columnId)}>
+                            <div className="flex items-center">
+                              {allColumns[columnId as keyof typeof allColumns].label}
+                              <SortIcon columnKey={columnId} />
+                            </div>
+                          </SortableHeader>
                         ))}
-                      {filteredList.filter(item => tabValue === 'all' || item.type === tabValue).length === 0 && (
-                        <tr>
-                          <td colSpan={5} className="px-4 py-8 text-center text-gray-500 italic">
-                            No entries found.
-                          </td>
+                      </SortableContext>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#004565]/10 bg-white/50">
+                    {filteredAndSortedList
+                      .filter(item => activeTab === 'all' || item.type === activeTab)
+                      .map((item, index) => (
+                        <tr
+                          key={item.id}
+                          className="hover:bg-red-50/30 transition-colors"
+                        >
+                          {columnOrder.map(columnId => (
+                            <td key={columnId} className="px-6 py-4 whitespace-nowrap">
+                              {renderCell(columnId, item, index)}
+                            </td>
+                          ))}
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </TabsContent>
-            ))}
-          </Tabs>
-        </CardContent>
-      </Card>
+                      ))}
+                    {filteredAndSortedList.filter(item => activeTab === 'all' || item.type === activeTab).length === 0 && (
+                      <tr>
+                        <td colSpan={columnOrder.length} className="px-4 py-8 text-center text-gray-500 italic">
+                          No entries found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </DndContext>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Add DNC Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
