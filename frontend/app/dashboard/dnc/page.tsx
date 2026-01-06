@@ -138,24 +138,16 @@ export default function DNCPage() {
     if (!itemToRemove) return
 
     try {
-      const endpoint = itemToRemove.type === 'company'
-        ? `/api/companies/${itemToRemove.id}/dnc`
-        : `/api/contacts/${itemToRemove.id}/dnc`
-
-      const response = await fetch(endpoint, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          is_dnc: false,
-          dnc_reason: null
-        }),
+      // Delete from dnc_list table
+      const response = await fetch(`/api/dnc/${itemToRemove.id}`, {
+        method: 'DELETE',
       })
 
       if (!response.ok) {
         throw new Error('Failed to remove from DNC list')
       }
+
+      toast.success(`Removed ${itemToRemove.value} from DNC list`)
 
       // Close dialog and refresh the list
       setIsRemoveConfirmOpen(false)
@@ -173,10 +165,10 @@ export default function DNCPage() {
       const result: string[] = []
       let current = ''
       let inQuotes = false
-      
+
       for (let i = 0; i < line.length; i++) {
         const char = line[i]
-        
+
         if (char === '"') {
           inQuotes = !inQuotes
         } else if (char === ',' && !inQuotes) {
@@ -187,7 +179,7 @@ export default function DNCPage() {
         }
       }
       result.push(current.trim())
-      
+
       return result.map(field => field.replace(/^["']|["']$/g, '').trim())
     })
   }
@@ -196,32 +188,32 @@ export default function DNCPage() {
     const file = event.target.files?.[0]
     if (file) {
       setUploadedFile(file)
-      
+
       try {
         const text = await file.text()
         const rows = parseCSV(text)
-        
+
         if (rows.length < 2) {
           toast.error('File must contain at least a header row and one data row')
           setUploadedFile(null)
           return
         }
-        
+
         // Extract headers and preview data
         setFileHeaders(rows[0])
         setFilePreview(rows.slice(1, 6)) // Show first 5 data rows
         setShowColumnMapping(true)
-        
+
         // Auto-detect common column names
         const headers = rows[0].map(h => h.toLowerCase())
-        const domainIndex = headers.findIndex(h => 
+        const domainIndex = headers.findIndex(h =>
           h.includes('domain') || h.includes('website') || h.includes('company')
         )
         const emailIndex = headers.findIndex(h => h.includes('email'))
-        const reasonIndex = headers.findIndex(h => 
+        const reasonIndex = headers.findIndex(h =>
           h.includes('reason') || h.includes('note') || h.includes('comment')
         )
-        
+
         if (domainIndex !== -1) {
           setSelectedValueColumn(domainIndex.toString())
           setBulkUploadType('company')
@@ -229,11 +221,11 @@ export default function DNCPage() {
           setSelectedValueColumn(emailIndex.toString())
           setBulkUploadType('contact')
         }
-        
+
         if (reasonIndex !== -1) {
           setSelectedReasonColumn(reasonIndex.toString())
         }
-        
+
       } catch (error) {
         console.error('Error parsing file:', error)
         toast.error('Failed to parse file. Please ensure it\'s a valid CSV file.')
@@ -267,32 +259,32 @@ export default function DNCPage() {
 
       if (validTypes.includes(file.type) || file.name.endsWith('.csv') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
         setUploadedFile(file)
-        
+
         // Parse the file
         try {
           const text = await file.text()
           const rows = parseCSV(text)
-          
+
           if (rows.length < 2) {
             toast.error('File must contain at least a header row and one data row')
             setUploadedFile(null)
             return
           }
-          
+
           setFileHeaders(rows[0])
           setFilePreview(rows.slice(1, 6))
           setShowColumnMapping(true)
-          
+
           // Auto-detect columns
           const headers = rows[0].map(h => h.toLowerCase())
-          const domainIndex = headers.findIndex(h => 
+          const domainIndex = headers.findIndex(h =>
             h.includes('domain') || h.includes('website') || h.includes('company')
           )
           const emailIndex = headers.findIndex(h => h.includes('email'))
-          const reasonIndex = headers.findIndex(h => 
+          const reasonIndex = headers.findIndex(h =>
             h.includes('reason') || h.includes('note') || h.includes('comment')
           )
-          
+
           if (domainIndex !== -1) {
             setSelectedValueColumn(domainIndex.toString())
             setBulkUploadType('company')
@@ -300,7 +292,7 @@ export default function DNCPage() {
             setSelectedValueColumn(emailIndex.toString())
             setBulkUploadType('contact')
           }
-          
+
           if (reasonIndex !== -1) {
             setSelectedReasonColumn(reasonIndex.toString())
           }
@@ -673,13 +665,12 @@ export default function DNCPage() {
                               {fileHeaders.map((header, index) => (
                                 <th
                                   key={index}
-                                  className={`px-3 py-2 text-left font-medium ${
-                                    index.toString() === selectedValueColumn
+                                  className={`px-3 py-2 text-left font-medium ${index.toString() === selectedValueColumn
                                       ? 'bg-blue-100 text-blue-900'
                                       : index.toString() === selectedReasonColumn
-                                      ? 'bg-green-100 text-green-900'
-                                      : 'text-gray-700'
-                                  }`}
+                                        ? 'bg-green-100 text-green-900'
+                                        : 'text-gray-700'
+                                    }`}
                                 >
                                   {header || `Col ${index + 1}`}
                                 </th>
@@ -692,13 +683,12 @@ export default function DNCPage() {
                                 {row.map((cell, cellIndex) => (
                                   <td
                                     key={cellIndex}
-                                    className={`px-3 py-2 ${
-                                      cellIndex.toString() === selectedValueColumn
+                                    className={`px-3 py-2 ${cellIndex.toString() === selectedValueColumn
                                         ? 'bg-blue-50'
                                         : cellIndex.toString() === selectedReasonColumn
-                                        ? 'bg-green-50'
-                                        : ''
-                                    }`}
+                                          ? 'bg-green-50'
+                                          : ''
+                                      }`}
                                   >
                                     {cell || '—'}
                                   </td>

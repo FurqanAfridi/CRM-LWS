@@ -109,18 +109,30 @@ export async function POST(request: Request) {
                     domain = domain.replace(/^www\./, '')
                     domain = domain.split('/')[0]
 
-                    // Find matching companies
-                    const { data: companies, error: searchError } = await supabase
+                    // Insert into dnc_list table (this will always succeed)
+                    const { error: insertError } = await supabase
+                        .from('dnc_list')
+                        .upsert({
+                            type: 'company',
+                            value: domain,
+                            reason: reason
+                        }, {
+                            onConflict: 'type,value',
+                            ignoreDuplicates: false
+                        })
+
+                    if (insertError) throw insertError
+
+                    // Also try to find and update matching companies
+                    const { data: companies } = await supabase
                         .from('companies')
                         .select('id, name, website')
                         .or(`website.ilike.%${domain}%`)
                         .limit(10)
 
-                    if (searchError) throw searchError
-
                     if (companies && companies.length > 0) {
                         // Mark as DNC
-                        const { error: updateError } = await supabase
+                        await supabase
                             .from('companies')
                             .update({
                                 is_dnc: true,
@@ -129,31 +141,38 @@ export async function POST(request: Request) {
                             })
                             .in('id', companies.map(c => c.id))
 
-                        if (updateError) throw updateError
-
-                        results.success.push(`${domain} (${companies.length} companies)`)
+                        results.success.push(`${domain} (${companies.length} companies updated)`)
                     } else {
-                        results.failed.push({
-                            value: domain,
-                            reason: 'No matching companies found'
-                        })
+                        results.success.push(`${domain} (added to DNC list)`)
                     }
 
                 } else if (type === 'contact') {
                     const email = value.toLowerCase()
 
-                    // Find matching contacts
-                    const { data: contacts, error: searchError } = await supabase
+                    // Insert into dnc_list table (this will always succeed)
+                    const { error: insertError } = await supabase
+                        .from('dnc_list')
+                        .upsert({
+                            type: 'contact',
+                            value: email,
+                            reason: reason
+                        }, {
+                            onConflict: 'type,value',
+                            ignoreDuplicates: false
+                        })
+
+                    if (insertError) throw insertError
+
+                    // Also try to find and update matching contacts
+                    const { data: contacts } = await supabase
                         .from('contacts')
                         .select('id, email, first_name, last_name')
                         .ilike('email', email)
                         .limit(10)
 
-                    if (searchError) throw searchError
-
                     if (contacts && contacts.length > 0) {
                         // Mark as DNC
-                        const { error: updateError } = await supabase
+                        await supabase
                             .from('contacts')
                             .update({
                                 is_dnc: true,
@@ -162,14 +181,9 @@ export async function POST(request: Request) {
                             })
                             .in('id', contacts.map(c => c.id))
 
-                        if (updateError) throw updateError
-
-                        results.success.push(`${email} (${contacts.length} contacts)`)
+                        results.success.push(`${email} (${contacts.length} contacts updated)`)
                     } else {
-                        results.failed.push({
-                            value: email,
-                            reason: 'No matching contacts found'
-                        })
+                        results.success.push(`${email} (added to DNC list)`)
                     }
                 }
             } catch (err: any) {

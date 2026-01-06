@@ -626,6 +626,32 @@ export interface Database {
           updated_at?: string
         }
       }
+      dnc_list: {
+        Row: {
+          id: string
+          type: 'company' | 'contact'
+          value: string
+          reason: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          type: 'company' | 'contact'
+          value: string
+          reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          type?: 'company' | 'contact'
+          value?: string
+          reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
   }
 }

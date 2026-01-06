@@ -30,91 +30,105 @@ export async function POST(request: Request) {
         }
 
         if (type === 'company') {
-            // For companies, search by website domain
-            // Extract domain from value (e.g., "example.com" or "https://example.com")
+            // Extract domain from value
             let domain = value.toLowerCase().trim()
             domain = domain.replace(/^https?:\/\//, '') // Remove protocol
             domain = domain.replace(/^www\./, '') // Remove www
             domain = domain.split('/')[0] // Remove path
 
-            // Find companies with matching website
-            const { data: companies, error: searchError } = await supabase
+            // Insert into dnc_list table (this will always succeed)
+            const { error: insertError } = await supabase
+                .from('dnc_list')
+                .upsert({
+                    type: 'company',
+                    value: domain,
+                    reason: reason || 'Added manually from DNC list'
+                }, {
+                    onConflict: 'type,value',
+                    ignoreDuplicates: false
+                })
+
+            if (insertError) {
+                return NextResponse.json({ error: insertError.message }, { status: 500 })
+            }
+
+            // Also try to find and update matching companies in the companies table
+            const { data: companies } = await supabase
                 .from('companies')
                 .select('id, name, website')
                 .or(`website.ilike.%${domain}%`)
                 .limit(10)
 
-            if (searchError) {
-                return NextResponse.json({ error: searchError.message }, { status: 500 })
-            }
+            let updatedCompanies: string[] = []
+            if (companies && companies.length > 0) {
+                // Mark matching companies as DNC
+                await supabase
+                    .from('companies')
+                    .update({
+                        is_dnc: true,
+                        dnc_reason: reason || 'Added manually from DNC list',
+                        dnc_date: new Date().toISOString()
+                    })
+                    .in('id', companies.map(c => c.id))
 
-            if (!companies || companies.length === 0) {
-                return NextResponse.json(
-                    { error: `No companies found with domain: ${domain}` },
-                    { status: 404 }
-                )
-            }
-
-            // Mark all matching companies as DNC
-            const { error: updateError } = await supabase
-                .from('companies')
-                .update({
-                    is_dnc: true,
-                    dnc_reason: reason || 'Added manually from DNC list',
-                    dnc_date: new Date().toISOString()
-                })
-                .in('id', companies.map(c => c.id))
-
-            if (updateError) {
-                return NextResponse.json({ error: updateError.message }, { status: 500 })
+                updatedCompanies = companies.map(c => c.name)
             }
 
             return NextResponse.json({
                 success: true,
-                count: companies.length,
-                companies: companies.map(c => c.name)
+                count: 1,
+                companies: updatedCompanies.length > 0
+                    ? updatedCompanies
+                    : [`${domain} (added to DNC list, no matching companies found)`]
             })
 
         } else if (type === 'contact') {
-            // For contacts, search by email
             const email = value.toLowerCase().trim()
 
-            // Find contacts with matching email
-            const { data: contacts, error: searchError } = await supabase
+            // Insert into dnc_list table (this will always succeed)
+            const { error: insertError } = await supabase
+                .from('dnc_list')
+                .upsert({
+                    type: 'contact',
+                    value: email,
+                    reason: reason || 'Added manually from DNC list'
+                }, {
+                    onConflict: 'type,value',
+                    ignoreDuplicates: false
+                })
+
+            if (insertError) {
+                return NextResponse.json({ error: insertError.message }, { status: 500 })
+            }
+
+            // Also try to find and update matching contacts in the contacts table
+            const { data: contacts } = await supabase
                 .from('contacts')
                 .select('id, email, first_name, last_name')
                 .ilike('email', email)
                 .limit(10)
 
-            if (searchError) {
-                return NextResponse.json({ error: searchError.message }, { status: 500 })
-            }
+            let updatedContacts: string[] = []
+            if (contacts && contacts.length > 0) {
+                // Mark matching contacts as DNC
+                await supabase
+                    .from('contacts')
+                    .update({
+                        is_dnc: true,
+                        dnc_reason: reason || 'Added manually from DNC list',
+                        dnc_date: new Date().toISOString()
+                    })
+                    .in('id', contacts.map(c => c.id))
 
-            if (!contacts || contacts.length === 0) {
-                return NextResponse.json(
-                    { error: `No contacts found with email: ${email}` },
-                    { status: 404 }
-                )
-            }
-
-            // Mark all matching contacts as DNC
-            const { error: updateError } = await supabase
-                .from('contacts')
-                .update({
-                    is_dnc: true,
-                    dnc_reason: reason || 'Added manually from DNC list',
-                    dnc_date: new Date().toISOString()
-                })
-                .in('id', contacts.map(c => c.id))
-
-            if (updateError) {
-                return NextResponse.json({ error: updateError.message }, { status: 500 })
+                updatedContacts = contacts.map(c => `${c.first_name} ${c.last_name} (${c.email})`)
             }
 
             return NextResponse.json({
                 success: true,
-                count: contacts.length,
-                contacts: contacts.map(c => `${c.first_name} ${c.last_name} (${c.email})`)
+                count: 1,
+                contacts: updatedContacts.length > 0
+                    ? updatedContacts
+                    : [`${email} (added to DNC list, no matching contacts found)`]
             })
 
         } else {
