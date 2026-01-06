@@ -26,7 +26,7 @@ export async function GET(request: Request) {
         // Build query for dnc_list table
         let query = supabase
             .from('dnc_list')
-            .select('id, type, value, reason, created_at')
+            .select('id, type, value, reason, company_name, created_at')
             .order('created_at', { ascending: false })
 
         // Filter by type if specified
@@ -46,6 +46,7 @@ export async function GET(request: Request) {
             type: entry.type,
             value: entry.value,
             reason: entry.reason || 'No reason provided',
+            company_name: entry.company_name,
             added_at: entry.created_at ? new Date(entry.created_at).toISOString().split('T')[0] : 'Unknown'
         }))
 
