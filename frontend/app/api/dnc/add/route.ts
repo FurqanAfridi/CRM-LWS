@@ -20,7 +20,7 @@ function getSupabaseClient() {
 export async function POST(request: Request) {
     try {
         const supabase = getSupabaseClient()
-        const { type, value, reason } = await request.json()
+        const { type, value, reason, company_name } = await request.json()
 
         if (!type || !value) {
             return NextResponse.json(
@@ -42,7 +42,8 @@ export async function POST(request: Request) {
                 .upsert({
                     type: 'company',
                     value: domain,
-                    reason: reason || 'Added manually from DNC list'
+                    reason: reason || 'Added manually from DNC list',
+                    company_name: company_name || null
                 }, {
                     onConflict: 'type,value',
                     ignoreDuplicates: false
@@ -91,7 +92,8 @@ export async function POST(request: Request) {
                 .upsert({
                     type: 'contact',
                     value: email,
-                    reason: reason || 'Added manually from DNC list'
+                    reason: reason || 'Added manually from DNC list',
+                    company_name: company_name || null
                 }, {
                     onConflict: 'type,value',
                     ignoreDuplicates: false

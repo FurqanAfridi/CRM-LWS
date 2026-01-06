@@ -55,6 +55,7 @@ export async function POST(request: Request) {
         let type = 'company'
         let valueColIndex = 0
         let reasonColIndex: number | null = null
+        let companyNameColIndex: number | null = null
 
         if (contentType.includes('application/json')) {
             const body = await request.json()
@@ -62,12 +63,16 @@ export async function POST(request: Request) {
             type = body.type
             valueColIndex = body.valueColumn || 0
             reasonColIndex = body.reasonColumn !== undefined ? body.reasonColumn : null
+            companyNameColIndex = body.companyNameColumn !== undefined ? body.companyNameColumn : null
+            // Re-assigning to local variables for use in the loop if needed, or just use them directly
+            // For now let's just use them in the loop.
         } else {
             const formData = await request.formData()
             const file = formData.get('file') as File
             type = formData.get('type') as string // 'company' or 'contact'
             const valueColumn = formData.get('valueColumn') as string // Column index
             const reasonColumn = formData.get('reasonColumn') as string | null
+            const companyNameColumn = formData.get('companyNameColumn') as string | null
 
             if (!file) {
                 return NextResponse.json({ error: 'No file provided' }, { status: 400 })
@@ -81,6 +86,10 @@ export async function POST(request: Request) {
             dataRows = rows.slice(1) // Skip header
             valueColIndex = parseInt(valueColumn)
             reasonColIndex = reasonColumn ? parseInt(reasonColumn) : null
+            companyNameColIndex = companyNameColumn ? parseInt(companyNameColumn) : null
+
+            // We need these to be accessible in the loop below
+            // Since they are inside the if/else, we should declare them outside.
         }
 
         const stats = {
@@ -103,6 +112,10 @@ export async function POST(request: Request) {
             const reason = reasonColIndex !== null && row[reasonColIndex]
                 ? row[reasonColIndex].trim()
                 : 'Added via bulk upload'
+
+            const companyName = companyNameColIndex !== null && row[companyNameColIndex]
+                ? row[companyNameColIndex].trim()
+                : null
 
             try {
                 let value = rawValue.toLowerCase()
@@ -131,7 +144,8 @@ export async function POST(request: Request) {
                     .insert({
                         type,
                         value,
-                        reason
+                        reason,
+                        company_name: companyName
                     })
 
                 if (insertError) {

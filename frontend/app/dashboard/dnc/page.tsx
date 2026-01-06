@@ -87,7 +87,7 @@ export default function DNCPage() {
   const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false)
   const [itemToRemove, setItemToRemove] = useState<DNCEntry | null>(null)
   const [addMode, setAddMode] = useState<'single' | 'list'>('single')
-  const [newEntry, setNewEntry] = useState({ type: 'company', value: '', reason: '' })
+  const [newEntry, setNewEntry] = useState({ type: 'company', value: '', reason: '', company_name: '' })
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
@@ -96,6 +96,7 @@ export default function DNCPage() {
   const [showColumnMapping, setShowColumnMapping] = useState(false)
   const [selectedValueColumn, setSelectedValueColumn] = useState<string>('')
   const [selectedReasonColumn, setSelectedReasonColumn] = useState<string>('none')
+  const [selectedCompanyNameColumn, setSelectedCompanyNameColumn] = useState<string>('none')
   const [bulkUploadType, setBulkUploadType] = useState<'company' | 'contact'>('company')
   const [isProcessing, setIsProcessing] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -291,7 +292,8 @@ export default function DNCPage() {
           body: JSON.stringify({
             type: newEntry.type,
             value: newEntry.value,
-            reason: newEntry.reason || 'Added manually from DNC list'
+            reason: newEntry.reason || 'Added manually from DNC list',
+            company_name: newEntry.company_name
           }),
         })
 
@@ -313,7 +315,7 @@ export default function DNCPage() {
         }
 
         // Reset form and close dialog
-        setNewEntry({ type: 'company', value: '', reason: '' })
+        setNewEntry({ type: 'company', value: '', reason: '', company_name: '' })
         setIsAddDialogOpen(false)
 
         // Refresh the DNC list
@@ -418,6 +420,9 @@ export default function DNCPage() {
         const reasonIndex = headers.findIndex(h =>
           h.includes('reason') || h.includes('note') || h.includes('comment')
         )
+        const companyNameIndex = headers.findIndex(h =>
+          h.includes('company name') || (h.includes('name') && !h.includes('contact')) || h === 'company'
+        )
 
         if (domainIndex !== -1) {
           setSelectedValueColumn(domainIndex.toString())
@@ -429,6 +434,10 @@ export default function DNCPage() {
 
         if (reasonIndex !== -1) {
           setSelectedReasonColumn(reasonIndex.toString())
+        }
+
+        if (companyNameIndex !== -1) {
+          setSelectedCompanyNameColumn(companyNameIndex.toString())
         }
 
       } catch (error) {
@@ -489,6 +498,9 @@ export default function DNCPage() {
           const reasonIndex = headers.findIndex(h =>
             h.includes('reason') || h.includes('note') || h.includes('comment')
           )
+          const companyNameIndex = headers.findIndex(h =>
+            h.includes('company name') || (h.includes('name') && !h.includes('contact')) || h === 'company'
+          )
 
           if (domainIndex !== -1) {
             setSelectedValueColumn(domainIndex.toString())
@@ -500,6 +512,10 @@ export default function DNCPage() {
 
           if (reasonIndex !== -1) {
             setSelectedReasonColumn(reasonIndex.toString())
+          }
+
+          if (companyNameIndex !== -1) {
+            setSelectedCompanyNameColumn(companyNameIndex.toString())
           }
         } catch (error) {
           console.error('Error parsing file:', error)
@@ -564,7 +580,8 @@ export default function DNCPage() {
             rows: chunk,
             type: bulkUploadType,
             valueColumn: parseInt(selectedValueColumn),
-            reasonColumn: selectedReasonColumn !== 'none' ? parseInt(selectedReasonColumn) : null
+            reasonColumn: selectedReasonColumn !== 'none' ? parseInt(selectedReasonColumn) : null,
+            companyNameColumn: selectedCompanyNameColumn !== 'none' ? parseInt(selectedCompanyNameColumn) : null
           }),
         })
 
@@ -605,6 +622,7 @@ export default function DNCPage() {
       setFilePreview([])
       setSelectedValueColumn('')
       setSelectedReasonColumn('none')
+      setSelectedCompanyNameColumn('none')
       setIsAddDialogOpen(false)
 
       // Refresh the DNC list
@@ -790,6 +808,15 @@ export default function DNCPage() {
                 />
               </div>
               <div className="grid grid-cols-4 gap-4 items-center">
+                <Label className="text-right">Company Name</Label>
+                <Input
+                  placeholder="Optional company name..."
+                  className="col-span-3"
+                  value={newEntry.company_name}
+                  onChange={(e) => setNewEntry({ ...newEntry, company_name: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-4 gap-4 items-center">
                 <Label className="text-right">Reason</Label>
                 <Input
                   placeholder="Optional reason..."
@@ -893,6 +920,23 @@ export default function DNCPage() {
                     </div>
 
                     <div className="space-y-2">
+                      <Label>Company Name (Optional)</Label>
+                      <Select value={selectedCompanyNameColumn} onValueChange={setSelectedCompanyNameColumn}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select column..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          {fileHeaders.map((header, index) => (
+                            <SelectItem key={index} value={index.toString()}>
+                              {header || `Column ${index + 1}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
                       <Label>Reason Column (Optional)</Label>
                       <Select value={selectedReasonColumn} onValueChange={setSelectedReasonColumn}>
                         <SelectTrigger>
@@ -922,10 +966,12 @@ export default function DNCPage() {
                                 <th
                                   key={index}
                                   className={`px-3 py-2 text-left font-medium ${index.toString() === selectedValueColumn
-                                    ? 'bg-blue-100 text-blue-900'
+                                    ? 'bg-blue-100 text-blue-900 border-b-2 border-blue-500'
                                     : index.toString() === selectedReasonColumn
-                                      ? 'bg-green-100 text-green-900'
-                                      : 'text-gray-700'
+                                      ? 'bg-green-100 text-green-900 border-b-2 border-green-500'
+                                      : index.toString() === selectedCompanyNameColumn
+                                        ? 'bg-purple-100 text-purple-900 border-b-2 border-purple-500'
+                                        : 'text-gray-700'
                                     }`}
                                 >
                                   {header || `Col ${index + 1}`}
@@ -940,10 +986,12 @@ export default function DNCPage() {
                                   <td
                                     key={cellIndex}
                                     className={`px-3 py-2 ${cellIndex.toString() === selectedValueColumn
-                                      ? 'bg-blue-50'
+                                      ? 'bg-blue-50 font-medium'
                                       : cellIndex.toString() === selectedReasonColumn
                                         ? 'bg-green-50'
-                                        : ''
+                                        : cellIndex.toString() === selectedCompanyNameColumn
+                                          ? 'bg-purple-50'
+                                          : ''
                                       }`}
                                   >
                                     {cell || '—'}
@@ -967,6 +1015,7 @@ export default function DNCPage() {
                       setFilePreview([])
                       setSelectedValueColumn('')
                       setSelectedReasonColumn('none')
+                      setSelectedCompanyNameColumn('none')
                     }}
                     className="w-full"
                     disabled={isProcessing}
@@ -1020,6 +1069,7 @@ export default function DNCPage() {
               setFilePreview([])
               setSelectedValueColumn('')
               setSelectedReasonColumn('none')
+              setSelectedCompanyNameColumn('none')
             }} disabled={isLoading || isProcessing}>Cancel</Button>
             <Button
               onClick={showColumnMapping ? handleBulkUpload : handleAddSubmit}
