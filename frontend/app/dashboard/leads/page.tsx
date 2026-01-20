@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
-import { Target, Download, Mail, Building2, ArrowRight, DollarSign, TrendingUp, AlertCircle, MessageSquare, FileText, RefreshCw, CheckCircle2, XCircle, ShieldCheck, Plus, Play, Edit, ArrowUp, ArrowDown, Ban } from 'lucide-react'
+import { Target, Download, Mail, Building2, ArrowRight, DollarSign, TrendingUp, AlertCircle, MessageSquare, FileText, RefreshCw, CheckCircle2, XCircle, ShieldCheck, Plus, Play, Edit, ArrowUp, ArrowDown, Ban, Loader2 } from 'lucide-react'
 import { Database, LeadStatus, QualificationStatus } from '@/lib/supabase/types'
 import { StartSequenceDialog } from '@/components/outreach/StartSequenceDialog'
 import {
