@@ -212,15 +212,15 @@ CREATE POLICY "Users can update email sequences"
 -- Email campaigns
 CREATE POLICY "Users can view email campaigns"
   ON public.email_campaigns FOR SELECT
-  USING (auth.role() = 'authenticated');
+  USING (auth.uid() IS NOT NULL);
 
 CREATE POLICY "Users can insert email campaigns"
   ON public.email_campaigns FOR INSERT
-  WITH CHECK (auth.role() = 'authenticated');
+  WITH CHECK (auth.uid() IS NOT NULL);
 
 CREATE POLICY "Users can update email campaigns"
   ON public.email_campaigns FOR UPDATE
-  USING (auth.role() = 'authenticated');
+  USING (auth.uid() IS NOT NULL);
 
 -- Email messages
 CREATE POLICY "Users can view email messages"
