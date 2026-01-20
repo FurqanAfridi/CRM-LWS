@@ -21,13 +21,25 @@ export interface ConversionFunnel {
 }
 
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {
-  // Use count queries instead of fetching all records for better performance
+  // First, fetch all DNC company IDs and contact IDs (same logic as getLeads)
+  const [dncCompaniesResult, dncContactsResult] = await Promise.all([
+    supabase.from('companies').select('id').eq('is_dnc', true),
+    supabase.from('contacts').select('id').eq('is_dnc', true),
+  ])
+
+  if (dncCompaniesResult.error) throw dncCompaniesResult.error
+  if (dncContactsResult.error) throw dncContactsResult.error
+
+  const dncCompanyIds = new Set((dncCompaniesResult.data || []).map((c: any) => c.id))
+  const dncContactIds = new Set((dncContactsResult.data || []).map((c: any) => c.id))
+
+  // Fetch all leads data to filter out DNC leads
   const [leadsResult, companiesResult, qualifiedLeadsResult, closedWonResult, pipelineValueResult] = await Promise.all([
-    supabase.from('leads').select('id', { count: 'exact', head: true }),
+    supabase.from('leads').select('id, company_id, contact_id'),
     supabase.from('companies').select('id', { count: 'exact', head: true }),
-    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('qualification_status', 'qualified'),
-    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('status', 'closed_won'),
-    supabase.from('leads').select('estimated_value').not('estimated_value', 'is', null),
+    supabase.from('leads').select('id, company_id, contact_id, qualification_status').eq('qualification_status', 'qualified'),
+    supabase.from('leads').select('id, company_id, contact_id, status').eq('status', 'closed_won'),
+    supabase.from('leads').select('id, company_id, contact_id, estimated_value').not('estimated_value', 'is', null),
   ])
 
   if (leadsResult.error) throw leadsResult.error
@@ -36,18 +48,42 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   if (closedWonResult.error) throw closedWonResult.error
   if (pipelineValueResult.error) throw pipelineValueResult.error
 
-  const totalLeads = leadsResult.count || 0
-  const qualifiedLeads = qualifiedLeadsResult.count || 0
-  const totalCompanies = companiesResult.count || 0
-  const closedWon = closedWonResult.count || 0
-  const pipelineValue = (pipelineValueResult.data || []).reduce((sum: number, lead: any) => {
+  // Filter out DNC leads from all results
+  const allLeads = (leadsResult.data || []).filter((lead: any) => {
+    const companyIsDnc = lead.company_id && dncCompanyIds.has(lead.company_id)
+    const contactIsDnc = lead.contact_id && dncContactIds.has(lead.contact_id)
+    return !companyIsDnc && !contactIsDnc
+  })
+
+  const qualifiedLeads = (qualifiedLeadsResult.data || []).filter((lead: any) => {
+    const companyIsDnc = lead.company_id && dncCompanyIds.has(lead.company_id)
+    const contactIsDnc = lead.contact_id && dncContactIds.has(lead.contact_id)
+    return !companyIsDnc && !contactIsDnc
+  })
+
+  const closedWon = (closedWonResult.data || []).filter((lead: any) => {
+    const companyIsDnc = lead.company_id && dncCompanyIds.has(lead.company_id)
+    const contactIsDnc = lead.contact_id && dncContactIds.has(lead.contact_id)
+    return !companyIsDnc && !contactIsDnc
+  })
+
+  const pipelineValue = (pipelineValueResult.data || []).filter((lead: any) => {
+    const companyIsDnc = lead.company_id && dncCompanyIds.has(lead.company_id)
+    const contactIsDnc = lead.contact_id && dncContactIds.has(lead.contact_id)
+    return !companyIsDnc && !contactIsDnc
+  }).reduce((sum: number, lead: any) => {
     return sum + (Number(lead.estimated_value) || 0)
   }, 0)
-  const conversionRate = totalLeads > 0 ? (closedWon / totalLeads) * 100 : 0
+
+  const totalLeads = allLeads.length
+  const qualifiedLeadsCount = qualifiedLeads.length
+  const totalCompanies = companiesResult.count || 0
+  const closedWonCount = closedWon.length
+  const conversionRate = totalLeads > 0 ? (closedWonCount / totalLeads) * 100 : 0
 
   return {
     totalLeads,
-    qualifiedLeads,
+    qualifiedLeads: qualifiedLeadsCount,
     totalCompanies,
     pipelineValue,
     conversionRate,

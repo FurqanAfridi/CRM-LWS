@@ -13,6 +13,43 @@ export interface LeadFilters {
   icp_score_min?: number
 }
 
+/**
+ * Check if a title represents a corporate role (not a single-location owner)
+ */
+function isCorporateRole(title: string | null): boolean {
+  if (!title) return false
+  const t = title.toLowerCase().trim()
+  
+  // Exclude single-location owner titles
+  if (t === 'owner' || t === 'business owner' || t === 'local owner') {
+    return false
+  }
+  // Exclude if it's just "owner" without other corporate indicators
+  if (t.includes('owner') && !t.includes('coo') && !t.includes('co-owner')) {
+    // Check if it's ONLY "owner" or "business owner" or "local owner"
+    const ownerOnlyPatterns = /^(local\s+)?(business\s+)?owner$/i
+    if (ownerOnlyPatterns.test(t)) {
+      return false
+    }
+  }
+  
+  // Include corporate roles
+  const corporateRoles = [
+    'ceo', 'chief executive officer',
+    'cfo', 'chief financial officer',
+    'coo', 'chief operating officer',
+    'cto', 'chief technology officer',
+    'cmo', 'chief marketing officer',
+    'svp', 'senior vice president',
+    'vp', 'vice president',
+    'president', 'executive',
+    'director', 'head of',
+    'finance', 'operations', 'facilities', 'procurement',
+    'manager', 'general manager'
+  ]
+  return corporateRoles.some(role => t.includes(role))
+}
+
 export async function getLeads(filters?: LeadFilters) {
   // First, fetch all DNC company IDs and contact IDs
   const { data: dncCompanies } = await supabase
@@ -28,10 +65,15 @@ export async function getLeads(filters?: LeadFilters) {
   const dncCompanyIds = new Set((dncCompanies || []).map((c: any) => c.id))
   const dncContactIds = new Set((dncContacts || []).map((c: any) => c.id))
 
+  // For qualified leads, we need to join with companies to check industry_type
+  const needsIndustryCheck = filters?.qualification_status === 'qualified'
+  
   // Now fetch leads with filters
   let query = supabase
     .from('leads')
-    .select('*')
+    .select(needsIndustryCheck 
+      ? '*, companies!leads_company_id_fkey(industry_type)' 
+      : '*')
     .order('created_at', { ascending: false })
     .limit(2000) // Increased limit to ensure we have enough after deduplication
 
@@ -51,14 +93,14 @@ export async function getLeads(filters?: LeadFilters) {
     query = query.gte('icp_score', filters.icp_score_min)
   }
 
-  const { data, error } = await query as { data: Lead[] | null; error: any }
+  const { data, error } = await query as { data: any[] | null; error: any }
 
   if (error) throw error
 
   // Deduplication logic: Keep the most recent lead for each unique email
   // If no email, use name + company_name as key
   const seen = new Set<string>()
-  const uniqueLeads: Lead[] = []
+  const uniqueLeads: any[] = []
 
   for (const lead of (data || [])) {
     const key = lead.email
@@ -72,13 +114,60 @@ export async function getLeads(filters?: LeadFilters) {
   }
 
   // Filter out leads where the company or contact is marked as DNC
-  const filteredData = uniqueLeads.filter((lead: Lead) => {
+  let filteredData = uniqueLeads.filter((lead: any) => {
     const companyIsDnc = lead.company_id && dncCompanyIds.has(lead.company_id)
     const contactIsDnc = lead.contact_id && dncContactIds.has(lead.contact_id)
 
     // Exclude lead if either company or contact is DNC
     return !companyIsDnc && !contactIsDnc
   })
+
+  // For qualified leads, apply additional filters:
+  // 1. Industry filtering: Only Restaurant or Hotel companies
+  // 2. Title filtering: Only corporate roles (exclude Owner, Business Owner, Local Owner)
+  if (filters?.qualification_status === 'qualified') {
+    // Fetch company industry types for leads that have company_id
+    const companyIds = new Set(
+      filteredData
+        .map((lead: any) => lead.company_id)
+        .filter((id: string | null): id is string => id !== null)
+    )
+    
+    let companyIndustryMap = new Map<string, string | null>()
+    if (companyIds.size > 0) {
+      const { data: companies } = await supabase
+        .from('companies')
+        .select('id, industry_type')
+        .in('id', Array.from(companyIds))
+      
+      if (companies) {
+        companies.forEach((company: any) => {
+          companyIndustryMap.set(company.id, company.industry_type)
+        })
+      }
+    }
+    
+    filteredData = filteredData.filter((lead: any) => {
+      // Industry filtering: Check if company is restaurant or hotel
+      if (lead.company_id) {
+        const industryType = companyIndustryMap.get(lead.company_id)
+        // Only include if industry_type is 'restaurant' or 'hotel'
+        if (industryType !== 'restaurant' && industryType !== 'hotel') {
+          return false
+        }
+      } else {
+        // If no company_id, we can't verify industry - exclude for safety
+        return false
+      }
+      
+      // Title filtering: Only include corporate roles
+      if (!isCorporateRole(lead.title)) {
+        return false
+      }
+      
+      return true
+    })
+  }
 
   return filteredData as Lead[]
 }
