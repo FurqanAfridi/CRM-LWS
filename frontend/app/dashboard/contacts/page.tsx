@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useQueryClient } from '@tanstack/react-query'
 import { Database } from '@/lib/supabase/types'
-import { Users, Plus, Mail, Phone, Building2, ArrowRight, Edit, ArrowUp, ArrowDown, Search, Loader2 } from 'lucide-react'
+import { Users, Plus, Mail, Phone, Building2, ArrowRight, Edit, ArrowUp, ArrowDown, Search, Loader2, Ban } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -87,6 +87,10 @@ export default function ContactsPage() {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
   const [isFormDialogOpen, setIsFormDialogOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
+  const [isDncConfirmOpen, setIsDncConfirmOpen] = useState(false)
+  const [isSubmittingDNC, setIsSubmittingDNC] = useState(false)
+  const [dncReasonInput, setDncReasonInput] = useState('')
+  const [contactToMarkDNC, setContactToMarkDNC] = useState<Contact | null>(null)
 
   // Form state
   const [formData, setFormData] = useState<Partial<ContactInsert & { company_name?: string | null }>>({
@@ -225,6 +229,62 @@ export default function ContactsPage() {
     setIsFormDialogOpen(true)
   }
 
+  const handleMarkDNC = (contact: Contact) => {
+    setContactToMarkDNC(contact)
+    setDncReasonInput('')
+    setIsDncConfirmOpen(true)
+  }
+
+  const confirmMarkDNC = async () => {
+    if (!contactToMarkDNC) return
+
+    setIsSubmittingDNC(true)
+    try {
+      const response = await fetch(`/api/contacts/${contactToMarkDNC.id}/dnc`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          is_dnc: true,
+          dnc_reason: dncReasonInput || 'Marked from Contacts page'
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update DNC status')
+      }
+
+      // Also add to dnc_list Source of Truth if email exists
+      if (contactToMarkDNC.email) {
+        await fetch('/api/dnc/add', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'contact',
+            value: contactToMarkDNC.email,
+            reason: dncReasonInput || 'Marked from Contacts page'
+          }),
+        })
+      }
+
+      // Refresh data
+      queryClient.invalidateQueries({ queryKey: ['contacts'] })
+
+      // Close dialog
+      setIsDncConfirmOpen(false)
+      setContactToMarkDNC(null)
+      setDncReasonInput('')
+    } catch (error) {
+      console.error('Error updating DNC status:', error)
+      alert('Failed to update DNC status. Please try again.')
+    } finally {
+      setIsSubmittingDNC(false)
+    }
+  }
+
   const handleSaveContact = async () => {
     try {
       if (isEditing && selectedContact) {
@@ -313,6 +373,15 @@ export default function ContactsPage() {
       case 'actions':
         return (
           <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+              onClick={() => handleMarkDNC(contact)}
+              title="Mark as DNC"
+            >
+              <Ban className="h-4 w-4" />
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -623,6 +692,66 @@ export default function ContactsPage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* DNC Confirmation Dialog */}
+      <Dialog open={isDncConfirmOpen} onOpenChange={setIsDncConfirmOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Ban className="h-5 w-5 text-red-600" />
+              Mark as DNC
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to mark <strong>{contactToMarkDNC?.first_name} {contactToMarkDNC?.last_name}</strong> as Do Not Contact?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 py-4">
+            <Label htmlFor="contact-dnc-reason">Reason (optional)</Label>
+            <Input
+              id="contact-dnc-reason"
+              placeholder="e.g., Requested removal, Left company, etc."
+              value={dncReasonInput}
+              onChange={(e) => setDncReasonInput(e.target.value)}
+              className="border-[#004565]/20 focus:border-[#004565]"
+              disabled={isSubmittingDNC}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsDncConfirmOpen(false)
+                setContactToMarkDNC(null)
+                setDncReasonInput('')
+              }}
+              disabled={isSubmittingDNC}
+              className="border-[#004565]/30 text-[#004565]"
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={confirmMarkDNC}
+              className="bg-red-600 hover:bg-red-700 underline"
+              disabled={isSubmittingDNC}
+            >
+              {isSubmittingDNC ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Marking...
+                </>
+              ) : (
+                <>
+                  <Ban className="h-4 w-4 mr-2" />
+                  Mark as DNC
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

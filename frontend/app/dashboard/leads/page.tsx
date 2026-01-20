@@ -6,12 +6,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
-import { Target, Download, Mail, Building2, ArrowRight, DollarSign, TrendingUp, AlertCircle, MessageSquare, FileText, RefreshCw, CheckCircle2, XCircle, ShieldCheck, Plus, Play, Edit, ArrowUp, ArrowDown } from 'lucide-react'
+import { Target, Download, Mail, Building2, ArrowRight, DollarSign, TrendingUp, AlertCircle, MessageSquare, FileText, RefreshCw, CheckCircle2, XCircle, ShieldCheck, Plus, Play, Edit, ArrowUp, ArrowDown, Ban, Loader2 } from 'lucide-react'
 import { Database, LeadStatus, QualificationStatus } from '@/lib/supabase/types'
 import { StartSequenceDialog } from '@/components/outreach/StartSequenceDialog'
 import {
@@ -31,6 +31,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { toast } from 'sonner'
 
 // Sortable Header Component
 function SortableHeader({ id, children, onClick }: { id: string; children: React.ReactNode; onClick?: () => void }) {
@@ -71,6 +72,10 @@ export default function LeadsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isFormDialogOpen, setIsFormDialogOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
+  const [isDncConfirmOpen, setIsDncConfirmOpen] = useState(false)
+  const [isSubmittingDNC, setIsSubmittingDNC] = useState(false)
+  const [dncReasonInput, setDncReasonInput] = useState('')
+  const [leadToMarkDNC, setLeadToMarkDNC] = useState<Lead | null>(null)
   const [isStartSequenceDialogOpen, setIsStartSequenceDialogOpen] = useState(false)
   const [selectedLeadIdsForSequence, setSelectedLeadIdsForSequence] = useState<string[]>([])
   const [selectedLeadNamesForSequence, setSelectedLeadNamesForSequence] = useState<string[]>([])
@@ -314,6 +319,49 @@ export default function LeadsPage() {
       notes: lead.notes || '',
     })
     setIsFormDialogOpen(true)
+  }
+
+  const handleMarkDNC = (lead: Lead) => {
+    setLeadToMarkDNC(lead)
+    setDncReasonInput('')
+    setIsDncConfirmOpen(true)
+  }
+
+  const confirmMarkDNC = async () => {
+    if (!leadToMarkDNC) return
+
+    setIsSubmittingDNC(true)
+    try {
+      const response = await fetch(`/api/leads/${leadToMarkDNC.id}/dnc`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          is_dnc: true,
+          reason: dncReasonInput || 'Marked from Leads page'
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update DNC status')
+      }
+
+      toast.success(`Successfully marked ${leadToMarkDNC.name || leadToMarkDNC.email} as DNC`)
+      
+      // Refresh leads data
+      queryClient.invalidateQueries({ queryKey: ['leads'] })
+
+      // Close dialog
+      setIsDncConfirmOpen(false)
+      setLeadToMarkDNC(null)
+      setDncReasonInput('')
+    } catch (error) {
+      console.error('Error updating DNC status:', error)
+      toast.error('Failed to update DNC status. Please try again.')
+    } finally {
+      setIsSubmittingDNC(false)
+    }
   }
 
   const handleSaveLead = async () => {
@@ -742,6 +790,18 @@ export default function LeadsPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleMarkDNC(lead)
+                                }}
+                                title="Mark as DNC"
+                              >
+                                <Ban className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 className="text-[#004565] hover:text-[#004565]/80 hover:bg-[#004565]/10"
                                 onClick={(e) => {
                                   e.stopPropagation()
@@ -1107,6 +1167,67 @@ export default function LeadsPage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* DNC Confirmation Dialog */}
+      <Dialog open={isDncConfirmOpen} onOpenChange={setIsDncConfirmOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Ban className="h-5 w-5 text-red-600" />
+              Mark as DNC
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to mark <strong>{leadToMarkDNC?.name || leadToMarkDNC?.email}</strong> as Do Not Contact? 
+              This will also mark their associated company and contact as DNC.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 py-4">
+            <Label htmlFor="lead-dnc-reason">Reason (optional)</Label>
+            <Input
+              id="lead-dnc-reason"
+              placeholder="e.g., Requested removal, Competitor, etc."
+              value={dncReasonInput}
+              onChange={(e) => setDncReasonInput(e.target.value)}
+              className="border-[#004565]/20 focus:border-[#004565]"
+              disabled={isSubmittingDNC}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsDncConfirmOpen(false)
+                setLeadToMarkDNC(null)
+                setDncReasonInput('')
+              }}
+              disabled={isSubmittingDNC}
+              className="border-[#004565]/30 text-[#004565]"
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={confirmMarkDNC}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={isSubmittingDNC}
+            >
+              {isSubmittingDNC ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Marking...
+                </>
+              ) : (
+                <>
+                  <Ban className="h-4 w-4 mr-2" />
+                  Mark as DNC
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
