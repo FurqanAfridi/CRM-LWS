@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { toast } from 'sonner'
 import { useLeads, useCreateLead, useUpdateLead } from '@/lib/hooks/useLeads'
 import { useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent } from '@/components/ui/card'
@@ -11,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
-import { Target, Download, Mail, Building2, ArrowRight, DollarSign, TrendingUp, AlertCircle, MessageSquare, FileText, RefreshCw, CheckCircle2, XCircle, ShieldCheck, Plus, Play, Edit, ArrowUp, ArrowDown, Ban, Loader2 } from 'lucide-react'
+import { Target, Download, Mail, Building2, ArrowRight, DollarSign, TrendingUp, AlertCircle, MessageSquare, FileText, RefreshCw, CheckCircle2, XCircle, ShieldCheck, Plus, Play, Edit, ArrowUp, ArrowDown, Ban } from 'lucide-react'
 import { Database, LeadStatus, QualificationStatus } from '@/lib/supabase/types'
 import { StartSequenceDialog } from '@/components/outreach/StartSequenceDialog'
 import {
@@ -31,7 +32,6 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { toast } from 'sonner'
 
 // Sortable Header Component
 function SortableHeader({ id, children, onClick }: { id: string; children: React.ReactNode; onClick?: () => void }) {
@@ -85,6 +85,7 @@ export default function LeadsPage() {
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [verifyError, setVerifyError] = useState<string | null>(null)
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
+  const [addingToDNC, setAddingToDNC] = useState<string | null>(null)
 
   // Form state
   const [formData, setFormData] = useState<Partial<LeadInsert>>({
@@ -468,6 +469,47 @@ export default function LeadsPage() {
     setSelectedLeadNamesForSequence([])
   }
 
+  const handleAddToDNC = async (lead: Lead) => {
+    if (!lead.email) {
+      toast.error('Lead must have an email address to add to DNC list')
+      return
+    }
+
+    setAddingToDNC(lead.id)
+    try {
+      const response = await fetch('/api/dnc/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: 'contact',
+          value: lead.email,
+          reason: `Added from Leads: ${lead.name || 'Unknown lead'}`,
+          company_name: lead.company_name || null
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to add to DNC list')
+      }
+
+      toast.success(`Successfully added ${lead.email} to DNC list`, {
+        description: lead.name ? `Lead: ${lead.name}` : undefined
+      })
+
+      // Refresh leads data to reflect any updates
+      queryClient.invalidateQueries({ queryKey: ['leads'] })
+    } catch (error: any) {
+      console.error('Error adding to DNC list:', error)
+      toast.error(error.message || 'Failed to add to DNC list. Please try again.')
+    } finally {
+      setAddingToDNC(null)
+    }
+  }
+
   const parseJsonField = (field: unknown): string[] => {
     if (!field) return []
     if (Array.isArray(field)) {
@@ -814,6 +856,29 @@ export default function LeadsPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleAddToDNC(lead)
+                                }}
+                                disabled={!lead.email || addingToDNC === lead.id}
+                                title={!lead.email ? 'Email required to add to DNC' : 'Add to DNC list'}
+                              >
+                                {addingToDNC === lead.id ? (
+                                  <>
+                                    <div className="h-4 w-4 mr-1 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
+                                    Adding...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Ban className="h-4 w-4 mr-1" />
+                                    DNC
+                                  </>
+                                )}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 className="text-[#00CD50] hover:text-[#00CD50]/80 hover:bg-[#00CD50]/10"
                                 onClick={(e) => {
                                   e.stopPropagation()
@@ -951,6 +1016,29 @@ export default function LeadsPage() {
                 >
                   <Edit className="h-4 w-4 mr-2" />
                   Edit
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (selectedLead) {
+                      handleAddToDNC(selectedLead)
+                      setIsDialogOpen(false)
+                    }
+                  }}
+                  disabled={!selectedLead?.email || addingToDNC === selectedLead?.id}
+                  variant="outline"
+                  className="border-red-300 text-red-600 hover:bg-red-50"
+                >
+                  {addingToDNC === selectedLead?.id ? (
+                    <>
+                      <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <Ban className="h-4 w-4 mr-2" />
+                      Add to DNC
+                    </>
+                  )}
                 </Button>
                 <Button
                   onClick={() => handleStartSequence(selectedLead)}
