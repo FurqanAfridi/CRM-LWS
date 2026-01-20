@@ -33,7 +33,7 @@ export async function getLeads(filters?: LeadFilters) {
     .from('leads')
     .select('*')
     .order('created_at', { ascending: false })
-    .limit(1000) // Add reasonable limit to prevent fetching too many records
+    .limit(2000) // Increased limit to ensure we have enough after deduplication
 
   if (filters?.status) {
     query = query.eq('status', filters.status)
@@ -51,12 +51,28 @@ export async function getLeads(filters?: LeadFilters) {
     query = query.gte('icp_score', filters.icp_score_min)
   }
 
-  const { data, error } = await query
+  const { data, error } = await query as { data: Lead[] | null; error: any }
 
   if (error) throw error
 
+  // Deduplication logic: Keep the most recent lead for each unique email
+  // If no email, use name + company_name as key
+  const seen = new Set<string>()
+  const uniqueLeads: Lead[] = []
+
+  for (const lead of (data || [])) {
+    const key = lead.email
+      ? `email:${lead.email.toLowerCase().trim()}`
+      : `name:${(lead.name || '').toLowerCase().trim()}|company:${(lead.company_name || '').toLowerCase().trim()}`
+
+    if (!seen.has(key)) {
+      seen.add(key)
+      uniqueLeads.push(lead)
+    }
+  }
+
   // Filter out leads where the company or contact is marked as DNC
-  const filteredData = (data || []).filter((lead: Lead) => {
+  const filteredData = uniqueLeads.filter((lead: Lead) => {
     const companyIsDnc = lead.company_id && dncCompanyIds.has(lead.company_id)
     const contactIsDnc = lead.contact_id && dncContactIds.has(lead.contact_id)
 
