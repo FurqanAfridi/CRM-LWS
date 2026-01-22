@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { updateEmailMessage, createEmailMessage } from '@/lib/supabase/queries/outreach'
+import { updateEmailMessage, createEmailMessage, updateEmailCampaign } from '@/lib/supabase/queries/outreach'
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,7 +38,27 @@ export async function POST(request: NextRequest) {
       if (replied_at) updates.replied_at = replied_at
       if (bounce_reason) updates.bounce_reason = bounce_reason
 
-      await updateEmailMessage(message_id, updates)
+      const updatedMessage = await updateEmailMessage(message_id, updates)
+
+      // Update campaign current_step when email is sent (to track sequence progress)
+      if (status === 'sent' && updatedMessage.campaign_id && updatedMessage.sequence_step !== undefined) {
+        try {
+          await updateEmailCampaign(updatedMessage.campaign_id, {
+            current_step: updatedMessage.sequence_step,
+          })
+        } catch (campaignError) {
+          // Log error but don't fail the webhook - campaign update is secondary
+          console.error('Error updating campaign current_step:', campaignError)
+        }
+      }
+
+      // Show success message specifically for response tracking (replied status)
+      if (status === 'replied') {
+        return NextResponse.json({
+          success: true,
+          message: 'Email response tracked successfully',
+        })
+      }
 
       return NextResponse.json({
         success: true,
@@ -67,6 +87,27 @@ export async function POST(request: NextRequest) {
       replied_at,
       bounce_reason,
     })
+
+    // Update campaign current_step when email is sent (to track sequence progress)
+    if (status === 'sent' && campaign_id && sequence_step !== undefined) {
+      try {
+        await updateEmailCampaign(campaign_id, {
+          current_step: sequence_step,
+        })
+      } catch (campaignError) {
+        // Log error but don't fail the webhook - campaign update is secondary
+        console.error('Error updating campaign current_step:', campaignError)
+      }
+    }
+
+    // Show success message specifically for response tracking (replied status)
+    if (status === 'replied') {
+      return NextResponse.json({
+        success: true,
+        message_id: message.id,
+        message: 'Email response tracked successfully',
+      })
+    }
 
     return NextResponse.json({
       success: true,
