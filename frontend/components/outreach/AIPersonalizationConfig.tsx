@@ -18,7 +18,7 @@ interface AIPersonalizationConfigProps {
   onClose?: () => void
 }
 
-const DEFAULT_PROMPT_TEMPLATE = `You are an expert B2B email copywriter specializing in personalized outreach.
+const DEFAULT_PROMPT_TEMPLATE = `You are an expert B2B email copywriter specializing in personalized outreach for high-level executives (CEOs, COOs).
 
 Write a professional, personalized email based on the following lead information:
 - Lead Name: {{lead_name}}
@@ -28,12 +28,14 @@ Write a professional, personalized email based on the following lead information
 - Pain Points: {{pain_points}}
 
 Instructions:
-1. Create a compelling subject line (max 60 characters)
-2. Write an engaging email body (3-4 paragraphs)
-3. Use a professional but friendly tone
-4. Address their specific pain points
-5. Include a clear call-to-action
-6. Keep it concise and scannable
+1. Create a compelling subject line (max 60 characters).
+2. Write an engaging email body (150 words or less).
+3. ❌ ABSOLUTELY FORBIDDEN: Never mention "pilot", "trial", "test", "single store", or "proof of concept".
+4. ✅ PORTFOLIO FOCUS: Emphasize managing their ENTIRE portfolio of locations from the start.
+5. ✅ SAVINGS MODEL: Explain that we are a "savings" partner. More sites managed = more savings. This portfolio-wide approach justifies the dedicated personnel and resources we allocate to set up and manage their program day-to-day.
+6. Use a professional, direct, and respectful tone.
+7. Address their specific pain points and include a clear call-to-action.
+8. Keep it concise, scannable, and focused on enterprise-level partnership.
 
 Strategy: {{strategy}}
 - If "aggressive": Be highly creative, use all available data, take more risks

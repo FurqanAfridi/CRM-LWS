@@ -65,7 +65,13 @@ export async function POST(request: NextRequest) {
       }),
     })
 
-    const n8nData = await n8nResponse.json().catch(() => ({}))
+    let n8nData = await n8nResponse.json().catch(() => ({}))
+
+    // n8n sometimes returns an array instead of a single object
+    // If it's an array, take the first element
+    if (Array.isArray(n8nData)) {
+      n8nData = n8nData.length > 0 ? n8nData[0] : {}
+    }
 
     if (!n8nResponse.ok) {
       return NextResponse.json(

@@ -20,6 +20,44 @@ export interface ConversionFunnel {
   percentage: number
 }
 
+/**
+ * Check if a title represents a corporate role (not a single-location owner)
+ * This matches the logic in leads.ts to ensure consistent filtering
+ */
+function isCorporateRole(title: string | null): boolean {
+  if (!title) return false
+  const t = title.toLowerCase().trim()
+  
+  // Exclude single-location owner titles
+  if (t === 'owner' || t === 'business owner' || t === 'local owner') {
+    return false
+  }
+  // Exclude if it's just "owner" without other corporate indicators
+  if (t.includes('owner') && !t.includes('coo') && !t.includes('co-owner')) {
+    // Check if it's ONLY "owner" or "business owner" or "local owner"
+    const ownerOnlyPatterns = /^(local\s+)?(business\s+)?owner$/i
+    if (ownerOnlyPatterns.test(t)) {
+      return false
+    }
+  }
+  
+  // Include corporate roles
+  const corporateRoles = [
+    'ceo', 'chief executive officer',
+    'cfo', 'chief financial officer',
+    'coo', 'chief operating officer',
+    'cto', 'chief technology officer',
+    'cmo', 'chief marketing officer',
+    'svp', 'senior vice president',
+    'vp', 'vice president',
+    'president', 'executive',
+    'director', 'head of',
+    'finance', 'operations', 'facilities', 'procurement',
+    'manager', 'general manager'
+  ]
+  return corporateRoles.some(role => t.includes(role))
+}
+
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   // First, fetch all DNC company IDs and contact IDs (same logic as getLeads)
   const [dncCompaniesResult, dncContactsResult] = await Promise.all([
@@ -34,10 +72,12 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   const dncContactIds = new Set((dncContactsResult.data || []).map((c: any) => c.id))
 
   // Fetch all leads data to filter out DNC leads
+  // For qualified leads, we also need title and company_id to apply filters
+  // For deduplication, we need email, name, and company_name
   const [leadsResult, companiesResult, qualifiedLeadsResult, closedWonResult, pipelineValueResult] = await Promise.all([
-    supabase.from('leads').select('id, company_id, contact_id'),
+    supabase.from('leads').select('id, company_id, contact_id, email, name, company_name'),
     supabase.from('companies').select('id', { count: 'exact', head: true }),
-    supabase.from('leads').select('id, company_id, contact_id, qualification_status').eq('qualification_status', 'qualified'),
+    supabase.from('leads').select('id, company_id, contact_id, qualification_status, title, email, name, company_name').eq('qualification_status', 'qualified'),
     supabase.from('leads').select('id, company_id, contact_id, status').eq('status', 'closed_won'),
     supabase.from('leads').select('id, company_id, contact_id, estimated_value').not('estimated_value', 'is', null),
   ])
@@ -49,17 +89,58 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   if (pipelineValueResult.error) throw pipelineValueResult.error
 
   // Filter out DNC leads from all results
-  const allLeads = (leadsResult.data || []).filter((lead: any) => {
+  const allLeadsFiltered: any[] = (leadsResult.data || []).filter((lead: any) => {
     const companyIsDnc = lead.company_id && dncCompanyIds.has(lead.company_id)
     const contactIsDnc = lead.contact_id && dncContactIds.has(lead.contact_id)
     return !companyIsDnc && !contactIsDnc
   })
 
-  const qualifiedLeads = (qualifiedLeadsResult.data || []).filter((lead: any) => {
+  // Apply deduplication logic (same as getLeads) - Keep the most recent lead for each unique email
+  // If no email, use name + company_name as key
+  const seen = new Set<string>()
+  const uniqueLeads: any[] = []
+
+  for (const lead of allLeadsFiltered) {
+    const key = lead.email
+      ? `email:${(lead.email || '').toLowerCase().trim()}`
+      : `name:${(lead.name || '').toLowerCase().trim()}|company:${(lead.company_name || '').toLowerCase().trim()}`
+
+    if (!seen.has(key)) {
+      seen.add(key)
+      uniqueLeads.push(lead)
+    }
+  }
+
+  const allLeads = uniqueLeads
+
+  // For qualified leads, match what the Qualified Leads page shows:
+  // The Qualified Leads page calls useLeads() without filters, then filters client-side
+  // by qualification_status === 'qualified' only. So we should:
+  // 1. Filter out DNC leads
+  // 2. Apply deduplication (same as getLeads)
+  // Note: We do NOT apply industry/title filters here to match the page behavior
+  const qualifiedLeadsFiltered: any[] = (qualifiedLeadsResult.data || []).filter((lead: any) => {
     const companyIsDnc = lead.company_id && dncCompanyIds.has(lead.company_id)
     const contactIsDnc = lead.contact_id && dncContactIds.has(lead.contact_id)
     return !companyIsDnc && !contactIsDnc
   })
+
+  // Apply deduplication to qualified leads (same as getLeads)
+  const qualifiedSeen = new Set<string>()
+  const uniqueQualifiedLeads: any[] = []
+
+  for (const lead of qualifiedLeadsFiltered) {
+    const key = lead.email
+      ? `email:${(lead.email || '').toLowerCase().trim()}`
+      : `name:${(lead.name || '').toLowerCase().trim()}|company:${(lead.company_name || '').toLowerCase().trim()}`
+
+    if (!qualifiedSeen.has(key)) {
+      qualifiedSeen.add(key)
+      uniqueQualifiedLeads.push(lead)
+    }
+  }
+
+  const qualifiedLeads = uniqueQualifiedLeads
 
   const closedWon = (closedWonResult.data || []).filter((lead: any) => {
     const companyIsDnc = lead.company_id && dncCompanyIds.has(lead.company_id)
