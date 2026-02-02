@@ -28,27 +28,15 @@ export default function LoginPage() {
 
     // Show loading state while checking authentication (with timeout fallback)
     const [showLoginForm, setShowLoginForm] = useState(false)
-    const [configError, setConfigError] = useState<string | null>(null)
     
     useEffect(() => {
-        // Check if Supabase is configured
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-        
-        if (!supabaseUrl || !supabaseKey) {
-            console.error('Supabase not configured - showing login form immediately')
-            setConfigError('Supabase configuration is missing. Please check environment variables.')
-            setShowLoginForm(true)
-            return
-        }
-
-        // Fallback: if authLoading takes too long (5 seconds in production), show login form anyway
+        // Fallback: if authLoading takes too long (15 seconds), show login form anyway
         const timeout = setTimeout(() => {
             if (authLoading) {
                 console.warn('Auth check taking too long, showing login form')
                 setShowLoginForm(true)
             }
-        }, 5000) // Reduced to 5 seconds for faster UX
+        }, 15000)
 
         return () => clearTimeout(timeout)
     }, [authLoading])
@@ -140,12 +128,6 @@ export default function LoginPage() {
 
 
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        {configError && (
-                            <div className="rounded-md bg-yellow-50 border border-yellow-200 p-3 flex items-center gap-2 text-sm text-yellow-800">
-                                <AlertCircle className="h-4 w-4" />
-                                <span>{configError}</span>
-                            </div>
-                        )}
                         {error && (
                             <div className="rounded-md bg-red-50 p-3 flex items-center gap-2 text-sm text-red-800">
                                 <AlertCircle className="h-4 w-4" />

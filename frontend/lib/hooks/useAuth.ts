@@ -29,23 +29,13 @@ export function useAuth() {
         let isMounted = true
         let timeoutId: NodeJS.Timeout | null = null
 
-        // Check if Supabase is configured
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-        
-        if (!supabaseUrl || !supabaseKey) {
-            console.error('Supabase not configured - skipping auth check')
-            setLoading(false)
-            return
-        }
-
-        // Set a timeout to prevent infinite loading (5 seconds in production)
+        // Set a timeout to prevent infinite loading (10 seconds)
         timeoutId = setTimeout(() => {
             if (isMounted) {
                 console.warn('Auth check timeout - setting loading to false')
                 setLoading(false)
             }
-        }, 5000)
+        }, 10000)
 
         // Get initial session with timeout protection
         const sessionPromise = supabase.auth.getSession()
