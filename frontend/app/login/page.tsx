@@ -12,14 +12,31 @@ import { AlertCircle } from 'lucide-react'
 
 export default function LoginPage() {
     const router = useRouter()
-    const { signIn, loading: authLoading } = useAuth()
+    const { signIn, loading: authLoading, isAuthenticated, user } = useAuth()
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    // Check Supabase configuration on mount
+    // Redirect to dashboard if user is already authenticated
+    useEffect(() => {
+        if (!authLoading && isAuthenticated && user) {
+            router.push('/dashboard')
+            router.refresh()
+        }
+    }, [authLoading, isAuthenticated, user, router])
 
+    // Show loading state while checking authentication
+    if (authLoading) {
+        return (
+            <div className="flex min-h-screen items-center justify-center px-4 relative overflow-hidden bg-gradient-to-br from-[#004565] via-[#004565] to-[#004565]">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-white border-t-transparent"></div>
+                    <p className="text-sm text-white">Checking authentication...</p>
+                </div>
+            </div>
+        )
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -113,7 +130,7 @@ export default function LoginPage() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
-                                disabled={loading || authLoading}
+                                disabled={loading}
                                 autoComplete="email"
                             />
                         </div>
@@ -127,7 +144,7 @@ export default function LoginPage() {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
-                                disabled={loading || authLoading}
+                                disabled={loading}
                                 autoComplete="current-password"
                             />
                         </div>
@@ -137,7 +154,7 @@ export default function LoginPage() {
                             className="w-full bg-[#004565] hover:bg-[#004565]/90 text-white shadow-lg hover:shadow-xl transition-all duration-300"
                             disabled={loading || authLoading}
                         >
-                            {loading ? 'Signing in...' : 'Sign In'}
+                            {loading || authLoading ? 'Signing in...' : 'Sign In'}
                         </Button>
                     </form>
 
