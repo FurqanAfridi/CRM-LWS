@@ -26,53 +26,23 @@ export function useAuth() {
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        let isMounted = true
-        let timeoutId: NodeJS.Timeout | null = null
-
-        // Set a timeout to prevent infinite loading (10 seconds)
-        timeoutId = setTimeout(() => {
-            if (isMounted) {
-                console.warn('Auth check timeout - setting loading to false')
+        // Get initial session
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setSession(session)
+            setUser(session?.user ?? null)
+            if (session?.user) {
+                fetchProfile(session.user.id)
+            } else {
                 setLoading(false)
             }
-        }, 10000)
-
-        // Get initial session with timeout protection
-        const sessionPromise = supabase.auth.getSession()
-        
-        sessionPromise
-            .then(({ data: { session }, error }) => {
-                if (!isMounted) return
-                
-                if (timeoutId) clearTimeout(timeoutId)
-                
-                if (error) {
-                    console.error('Error getting session:', error)
-                    setLoading(false)
-                    return
-                }
-
-                setSession(session)
-                setUser(session?.user ?? null)
-                if (session?.user) {
-                    fetchProfile(session.user.id)
-                } else {
-                    setLoading(false)
-                }
-            })
-            .catch((error) => {
-                if (!isMounted) return
-                if (timeoutId) clearTimeout(timeoutId)
-                console.error('Error in getSession:', error)
-                setLoading(false)
-            })
+        }).catch(() => {
+            setLoading(false)
+        })
 
         // Listen for auth changes
         const {
             data: { subscription },
         } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            if (!isMounted) return
-            
             setSession(session)
             setUser(session?.user ?? null)
             if (session?.user) {
@@ -83,26 +53,13 @@ export function useAuth() {
             }
         })
 
-        return () => {
-            isMounted = false
-            if (timeoutId) clearTimeout(timeoutId)
-            subscription.unsubscribe()
-        }
+        return () => subscription.unsubscribe()
     }, [])
 
     async function fetchProfile(userId: string) {
         try {
-            // Get user - with error handling
-            const { data: { user: authUser }, error: getUserError } = await supabase.auth.getUser()
+            const { data: { user: authUser } } = await supabase.auth.getUser()
 
-            if (getUserError) {
-                console.error('Error getting user:', getUserError)
-                setProfile(null)
-                setLoading(false)
-                return
-            }
-
-            // Fetch profile - with error handling
             const { data, error } = await (supabase
                 .from('profiles') as any)
                 .select('*')
@@ -112,37 +69,30 @@ export function useAuth() {
             if (error) {
                 // If profile doesn't exist, try to create it
                 if (error.code === 'PGRST116' && authUser) {
-                    try {
-                        const { data: newProfile } = await (supabase
-                            .from('profiles') as any)
-                            .insert({
-                                id: userId,
-                                email: authUser.email || '',
-                                full_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || null,
-                                role: 'user',
-                                is_active: true,
-                            })
-                            .select()
-                            .single()
+                    const { data: newProfile } = await (supabase
+                        .from('profiles') as any)
+                        .insert({
+                            id: userId,
+                            email: authUser.email || '',
+                            full_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || null,
+                            role: 'user',
+                            is_active: true,
+                        })
+                        .select()
+                        .single()
 
-                        if (newProfile) {
-                            setProfile(newProfile as Profile)
-                        } else {
-                            setProfile(null)
-                        }
-                    } catch (createError) {
-                        console.error('Error creating profile:', createError)
+                    if (newProfile) {
+                        setProfile(newProfile as Profile)
+                    } else {
                         setProfile(null)
                     }
                 } else {
-                    console.error('Error fetching profile:', error)
                     setProfile(null)
                 }
             } else {
                 setProfile(data as Profile)
             }
-        } catch (error) {
-            console.error('Error in fetchProfile:', error)
+        } catch {
             setProfile(null)
         } finally {
             setLoading(false)
