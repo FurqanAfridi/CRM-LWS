@@ -6,6 +6,9 @@ import { getPersonalizationConfig } from '@/lib/supabase/queries/outreach'
 // n8n webhook URL for generate preview
 const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_GENERATE_PREVIEW || 'https://auto.lincolnwaste.co/webhook/emailpreview'
 
+// Increase timeout for this route (max 300 seconds for Vercel, adjust for your deployment)
+export const maxDuration = 300 // 5 minutes
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   // eslint-disable-next-line no-console
@@ -97,15 +100,53 @@ export async function POST(request: NextRequest) {
       payloadSize: JSON.stringify(requestPayload).length,
     })
 
-    // Call n8n webhook with all data
-    const n8nResponse = await fetch(N8N_WEBHOOK_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify(requestPayload),
-    })
+    // Set timeout for n8n webhook call (4 minutes to avoid nginx timeout)
+    const TIMEOUT_MS = 4 * 60 * 1000 // 4 minutes
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
+
+    let n8nResponse: Response
+    try {
+      // Call n8n webhook with all data and timeout
+      n8nResponse = await fetch(N8N_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(requestPayload),
+        signal: controller.signal,
+      })
+      clearTimeout(timeoutId)
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId)
+      
+      // Handle timeout specifically
+      if (fetchError.name === 'AbortError' || fetchError.message?.includes('timeout')) {
+        console.error('n8n webhook timeout:', {
+          url: N8N_WEBHOOK_URL,
+          timeout: TIMEOUT_MS,
+        })
+        return NextResponse.json(
+          { 
+            error: 'Request timeout: The email preview generation is taking too long. Please try again or contact support if the issue persists.',
+            timeout: true,
+            timeout_ms: TIMEOUT_MS,
+          },
+          { status: 504 } // Gateway Timeout
+        )
+      }
+      
+      // Handle other fetch errors
+      console.error('Error calling n8n webhook:', fetchError)
+      return NextResponse.json(
+        { 
+          error: 'Failed to connect to email preview service. Please try again.',
+          details: process.env.NODE_ENV === 'development' ? fetchError.message : undefined
+        },
+        { status: 503 } // Service Unavailable
+      )
+    }
 
     // eslint-disable-next-line no-console
     if (process.env.NODE_ENV === 'development') console.log('n8n response status:', n8nResponse.status, n8nResponse.statusText)

@@ -12,13 +12,122 @@ import { AlertCircle } from 'lucide-react'
 
 export default function LoginPage() {
     const router = useRouter()
-    const { signIn, loading: authLoading } = useAuth()
+    const { signIn, signOut, loading: authLoading } = useAuth()
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    // Check Supabase configuration on mount
+    // Forcefully remove ALL cookies and clear session on mount
+    useEffect(() => {
+        const clearAllCookies = async () => {
+            // First, call server-side API to clear HttpOnly cookies
+            try {
+                await fetch('/api/auth/clear-cookies', {
+                    method: 'POST',
+                    credentials: 'include',
+                })
+            } catch (err) {
+                // eslint-disable-next-line no-console
+                console.error('Error calling clear-cookies API:', err)
+            }
+
+            // Clear all client-side accessible cookies with every possible variation
+            const hostname = window.location.hostname
+            const paths = ['/', '', '/dashboard', '/login', '/api']
+            const domains = [
+                hostname,
+                `.${hostname}`,
+                hostname.replace('www.', ''),
+                `.${hostname.replace('www.', '')}`,
+                '',
+            ]
+
+            // Get all current cookies
+            const currentCookies = document.cookie.split(';').map(c => {
+                const eqPos = c.indexOf('=')
+                return eqPos > -1 ? c.substr(0, eqPos).trim() : c.trim()
+            }).filter(Boolean)
+
+            // Also try common cookie name patterns
+            const commonPatterns = [
+                'sb-', 'auth', 'session', 'token', 'access', 'refresh', 
+                'user', 'supabase', 'next-auth', 'csrf', 'sid'
+            ]
+
+            // Combine current cookies with patterns
+            const allCookieNames = new Set([
+                ...currentCookies,
+                ...commonPatterns.flatMap(pattern => 
+                    Array.from({ length: 10 }, (_, i) => i === 0 ? pattern : `${pattern}${i}`)
+                )
+            ])
+
+            // Delete every cookie with every possible combination
+            allCookieNames.forEach((name) => {
+                if (!name) return
+                
+                paths.forEach((path) => {
+                    domains.forEach((domain) => {
+                        // Try with domain
+                        if (domain) {
+                            document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=${path};domain=${domain}`
+                        }
+                        // Try without domain
+                        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=${path}`
+                        // Try with secure flag
+                        if (window.location.protocol === 'https:') {
+                            document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=${path};secure`
+                            if (domain) {
+                                document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=${path};domain=${domain};secure`
+                            }
+                        }
+                    })
+                })
+            })
+
+            // Clear localStorage
+            try {
+                localStorage.clear()
+            } catch (err) {
+                // eslint-disable-next-line no-console
+                console.error('Error clearing localStorage:', err)
+            }
+
+            // Clear sessionStorage
+            try {
+                sessionStorage.clear()
+            } catch (err) {
+                // eslint-disable-next-line no-console
+                console.error('Error clearing sessionStorage:', err)
+            }
+
+            // Clear IndexedDB (Supabase might use it)
+            try {
+                if ('indexedDB' in window && indexedDB.databases) {
+                    indexedDB.databases().then((databases) => {
+                        databases.forEach((db) => {
+                            if (db.name) {
+                                const deleteReq = indexedDB.deleteDatabase(db.name)
+                                deleteReq.onsuccess = () => {
+                                    // Database deleted
+                                }
+                                deleteReq.onerror = () => {
+                                    // Ignore errors
+                                }
+                            }
+                        })
+                    }).catch(() => {
+                        // Ignore errors
+                    })
+                }
+            } catch (err) {
+                // Ignore errors
+            }
+        }
+
+        clearAllCookies()
+    }, [])
 
 
     const handleSubmit = async (e: React.FormEvent) => {
