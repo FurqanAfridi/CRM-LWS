@@ -32,7 +32,17 @@ export default function OutreachPage() {
   }
 
   const leadsByStatus = {
-    not_started: leads?.filter(l => l.email && getLeadStatus(l) === 'not_started') || [],
+    not_started: leads?.filter(l => {
+      if (!l.email) return false
+      // Exclude if lead has a status other than not_started
+      if (getLeadStatus(l) !== 'not_started') return false
+      
+      // Exclude if lead is active in a campaign (same logic as filteredLeads)
+      const campaign = campaigns?.find((c: any) => c.lead_id === l.id && (c.status === 'active' || c.status === 'pending'))
+      if (campaign || l.outreach_status === 'in_sequence') return false
+      
+      return true
+    }) || [],
     responded: leads?.filter(l => l.email && getLeadStatus(l) === 'responded') || [],
     booked: leads?.filter(l => l.email && getLeadStatus(l) === 'booked') || [],
   }
@@ -253,11 +263,10 @@ export default function OutreachPage() {
                     <th className="px-2 py-3 text-center text-xs font-semibold text-[#004565] uppercase w-12">
                       <input
                         type="checkbox"
-                        checked={selectedLeadIds.length > 0 && selectedLeadIds.length === leads?.filter(l => l.email && getLeadStatus(l) === 'not_started').length}
+                        checked={selectedLeadIds.length > 0 && selectedLeadIds.length === leadsByStatus.not_started.length}
                         onChange={(e) => {
-                          const notStartedLeads = leads?.filter(l => l.email && getLeadStatus(l) === 'not_started') || []
                           if (e.target.checked) {
-                            setSelectedLeadIds(notStartedLeads.map(l => l.id))
+                            setSelectedLeadIds(leadsByStatus.not_started.map(l => l.id))
                           } else {
                             setSelectedLeadIds([])
                           }
