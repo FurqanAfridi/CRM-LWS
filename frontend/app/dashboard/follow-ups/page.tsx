@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useFollowupQueue, useLeadConversation, usePauseSequence, useResumeSequence, useAIResponderConfig, useLeadMessages, usePendingResponses, useUpdatePendingResponse } from '@/lib/hooks/useOutreach'
-import { MessageSquare, Mail, Clock, Calendar, User, Building2, ArrowRight, Reply, Pause, Play, CheckCircle2, Filter, Search, Loader2, Bot, Info, Bell, Crown, Star, Briefcase } from 'lucide-react'
+import { MessageSquare, Mail, Clock, Calendar, User, Building2, ArrowRight, Reply, Pause, Play, CheckCircle2, Filter, Search, Loader2, Bot, Info, Bell, Crown, Star, Briefcase, ArrowUp, ArrowDown } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -29,7 +29,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 
 // Sortable Header Component
-function SortableHeader({ id, children }: { id: string; children: React.ReactNode }) {
+function SortableHeader({ id, children, onClick, sortDirection }: { id: string; children: React.ReactNode; onClick?: () => void; sortDirection?: 'asc' | 'desc' | null }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id })
 
   const style = {
@@ -45,9 +45,15 @@ function SortableHeader({ id, children }: { id: string; children: React.ReactNod
       style={style}
       {...attributes}
       {...listeners}
-      className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-move bg-[#004565]/5 relative group touch-none"
+      className="px-6 py-3 text-left text-xs font-semibold text-[#004565] uppercase tracking-wider cursor-move bg-[#004565]/5 relative group touch-none hover:bg-[#004565]/10"
+      onClick={onClick}
     >
-      {children}
+      <div className="flex items-center">
+        {children}
+        {sortDirection === 'asc' && <ArrowUp className="h-3 w-3 ml-1" />}
+        {sortDirection === 'desc' && <ArrowDown className="h-3 w-3 ml-1" />}
+        {!sortDirection && onClick && <ArrowUp className="h-3 w-3 ml-1 opacity-0 group-hover:opacity-30" />}
+      </div>
     </th>
   )
 }
@@ -267,9 +273,9 @@ function FollowUpRow({
 export default function FollowUpsPage() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'sent' | 'cancelled' | 'skipped'>('all')
   const [searchTerm, setSearchTerm] = useState('')
-  const { data: followupQueue, isLoading: leadsLoading, error } = useFollowupQueue(
-    filterStatus !== 'all' ? { status: filterStatus } : undefined
-  )
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
+  // Fetch all followups so we can calculate correct counts and filter client-side
+  const { data: followupQueue, isLoading: leadsLoading, error } = useFollowupQueue()
   const pauseSequence = usePauseSequence()
   const resumeSequence = useResumeSequence()
   const { data: aiResponderConfig } = useAIResponderConfig()
@@ -285,14 +291,14 @@ export default function FollowUpsPage() {
 
   // Column definitions
   const allColumns = {
-    hash: { label: '#' },
-    lead: { label: 'Lead' },
-    sequence: { label: 'Sequence' },
-    followup_number: { label: 'Follow-up #' },
-    days: { label: 'Days' },
-    status: { label: 'Status' },
-    followup_action: { label: 'Follow-up' },
-    actions: { label: 'Actions' },
+    hash: { label: '#', sortable: false },
+    lead: { label: 'Lead', sortable: true },
+    sequence: { label: 'Sequence', sortable: true },
+    followup_number: { label: 'Follow-up #', sortable: true },
+    days: { label: 'Days', sortable: true },
+    status: { label: 'Status', sortable: false },
+    followup_action: { label: 'Follow-up', sortable: false },
+    actions: { label: 'Actions', sortable: false },
   }
 
   const [columnOrder, setColumnOrder] = useState<string[]>([
@@ -329,6 +335,15 @@ export default function FollowUpsPage() {
     }
   }
 
+  const handleSort = (key: string) => {
+    setSortConfig((current) => {
+      if (current?.key === key) {
+        return current.direction === 'asc' ? { key, direction: 'desc' } : null
+      }
+      return { key, direction: 'asc' }
+    })
+  }
+
   // Request notification permission on mount
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -336,34 +351,18 @@ export default function FollowUpsPage() {
     }
   }, [])
 
-  // Memoize filtered followups to avoid re-filtering on every render
-  // Deduplicate by lead_id to show each email only once
-  const filteredFollowups = useMemo(() => {
+  // First deduplicate the queue to get unique leads
+  const deduplicatedQueue = useMemo(() => {
     if (!followupQueue) return []
-
-    // First, filter by search term if provided
-    let filtered = followupQueue
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase()
-      filtered = followupQueue.filter((item) => {
-        return (
-          (item.lead?.name?.toLowerCase().includes(searchLower) || false) ||
-          (item.lead?.email?.toLowerCase().includes(searchLower) || false) ||
-          (item.lead?.company_name?.toLowerCase().includes(searchLower) || false) ||
-          (item.sequence?.name?.toLowerCase().includes(searchLower) || false)
-        )
-      })
-    }
 
     // Deduplicate by lead_id - keep only one entry per lead
     const leadMap = new Map<string, any>()
 
-    filtered.forEach((item) => {
+    followupQueue.forEach((item) => {
       const leadId = item.lead_id
       const existing = leadMap.get(leadId)
 
       if (!existing) {
-        // First occurrence of this lead
         leadMap.set(leadId, item)
       } else {
         // Priority logic for duplicates:
@@ -374,11 +373,9 @@ export default function FollowUpsPage() {
         const currentIsPending = item.status === 'pending'
 
         if (currentIsPending && !existingIsPending) {
-          // Current is pending, existing is not - prefer current
           leadMap.set(leadId, item)
         } else if (!currentIsPending && existingIsPending) {
-          // Existing is pending, current is not - keep existing
-          // do nothing
+          // keep existing
         } else {
           // Both have same pending status, prefer responded=true
           if (item.responded && !existing.responded) {
@@ -397,9 +394,82 @@ export default function FollowUpsPage() {
       }
     })
 
-    // Convert map values back to array
-    // Convert map values back to array and sort by Priority then Date
-    return Array.from(leadMap.values()).sort((a, b) => {
+    return Array.from(leadMap.values())
+  }, [followupQueue])
+
+  // Calculate counts from deduplicated unique leads
+  const { pendingCount, sentCount, cancelledCount, skippedCount } = useMemo(() => {
+    return {
+      pendingCount: deduplicatedQueue.filter((item) => item.status === 'pending').length,
+      sentCount: deduplicatedQueue.filter((item) => item.status === 'sent').length,
+      cancelledCount: deduplicatedQueue.filter((item) => item.status === 'cancelled').length,
+      skippedCount: deduplicatedQueue.filter((item) => item.status === 'skipped').length,
+    }
+  }, [deduplicatedQueue])
+
+  // Filter and sort for display
+  const filteredFollowups = useMemo(() => {
+    // 1. Filter by Status
+    let result = deduplicatedQueue
+    if (filterStatus !== 'all') {
+      result = result.filter(item => item.status === filterStatus)
+    }
+
+    // 2. Filter by Search
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase()
+      result = result.filter((item) => {
+        return (
+          (item.lead?.name?.toLowerCase().includes(searchLower) || false) ||
+          (item.lead?.email?.toLowerCase().includes(searchLower) || false) ||
+          (item.lead?.company_name?.toLowerCase().includes(searchLower) || false) ||
+          (item.sequence?.name?.toLowerCase().includes(searchLower) || false)
+        )
+      })
+    }
+
+    // 3. Sort
+    return result.sort((a, b) => {
+      // Use config sort if active
+      if (sortConfig) {
+        let aValue: any
+        let bValue: any
+
+        switch (sortConfig.key) {
+          case 'lead':
+            aValue = a.lead?.name || a.lead?.email || ''
+            bValue = b.lead?.name || b.lead?.email || ''
+            break
+          case 'sequence':
+            aValue = a.sequence?.name || ''
+            bValue = b.sequence?.name || ''
+            break
+          case 'followup_number':
+            aValue = a.followup_number || 0
+            bValue = b.followup_number || 0
+            break
+          case 'days':
+             // Calculate days since
+             const now = new Date().getTime()
+             aValue = Math.floor(Math.abs(now - new Date(a.scheduled_for).getTime()) / (1000 * 60 * 60 * 24))
+             bValue = Math.floor(Math.abs(now - new Date(b.scheduled_for).getTime()) / (1000 * 60 * 60 * 24))
+             break
+          default:
+            return 0
+        }
+
+        // String comparison for names/sequences
+        if (typeof aValue === 'string') {
+           const strA = aValue.toLowerCase()
+           const strB = bValue.toLowerCase()
+           return sortConfig.direction === 'asc' ? strA.localeCompare(strB) : strB.localeCompare(strA)
+        }
+        
+        // Numeric comparison
+        return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue
+      }
+
+      // Default Priority/Status/Date Sort (Existing logic)
       // 1. Priority (Higher first)
       const priorityA = getLeadPriority(a.lead?.title)
       const priorityB = getLeadPriority(b.lead?.title)
@@ -419,18 +489,7 @@ export default function FollowUpsPage() {
       const dateB = new Date(b.scheduled_for).getTime()
       return dateA - dateB
     })
-  }, [followupQueue, searchTerm])
-
-  // Memoize counts to avoid recalculating on every render
-  const { pendingCount, sentCount, cancelledCount, skippedCount } = useMemo(() => {
-    if (!followupQueue) return { pendingCount: 0, sentCount: 0, cancelledCount: 0, skippedCount: 0 }
-    return {
-      pendingCount: followupQueue.filter((item) => item.status === 'pending').length,
-      sentCount: followupQueue.filter((item) => item.status === 'sent').length,
-      cancelledCount: followupQueue.filter((item) => item.status === 'cancelled').length,
-      skippedCount: followupQueue.filter((item) => item.status === 'skipped').length,
-    }
-  }, [followupQueue])
+  }, [deduplicatedQueue, filterStatus, searchTerm, sortConfig])
 
   const handleViewDetails = (item: any) => {
     setSelectedFollowup(item)
@@ -757,7 +816,12 @@ export default function FollowUpsPage() {
                   <tr className="border-b bg-[#004565]/5">
                     <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
                       {columnOrder.map((columnId) => (
-                        <SortableHeader key={columnId} id={columnId}>
+                        <SortableHeader 
+                          key={columnId} 
+                          id={columnId}
+                          onClick={() => allColumns[columnId as keyof typeof allColumns].sortable ? handleSort(columnId) : undefined}
+                          sortDirection={sortConfig?.key === columnId ? sortConfig.direction : null}
+                        >
                           {allColumns[columnId as keyof typeof allColumns].label}
                         </SortableHeader>
                       ))}
