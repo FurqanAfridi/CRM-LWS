@@ -432,9 +432,10 @@ export async function getLeadConversation(leadId: string) {
   })) as LeadEmailConversation[]
 }
 
-// Legacy function - kept for backwards compatibility but now uses interactions
+// Get all conversation messages for a lead from both interactions and email_messages tables
 export async function getLeadMessages(leadId: string) {
-  const { data, error } = await supabase
+  // Fetch from interactions table (includes both inbound and outbound)
+  const { data: interactionsData, error: interactionsError } = await supabase
     .from('interactions')
     .select('id, lead_id, campaign_id, sequence_step, direction, subject, content, created_at, email_message_id')
     .eq('lead_id', leadId)
@@ -442,12 +443,24 @@ export async function getLeadMessages(leadId: string) {
     .order('created_at', { ascending: false })
     .limit(100)
 
-  if (error) {
-    throw error
+  if (interactionsError) {
+    throw interactionsError
   }
 
-  // Map to LeadEmailConversation format
-  return (data || []).map((item: any) => ({
+  // Fetch from email_messages table (outbound emails sent)
+  const { data: emailMessagesData, error: emailMessagesError } = await supabase
+    .from('email_messages')
+    .select('id, lead_id, campaign_id, sequence_step, subject, content, status, sent_at, delivered_at, opened_at, replied_at, created_at')
+    .eq('lead_id', leadId)
+    .order('created_at', { ascending: false })
+    .limit(100)
+
+  if (emailMessagesError) {
+    throw emailMessagesError
+  }
+
+  // Map interactions to LeadEmailConversation format
+  const interactions = (interactionsData || []).map((item: any) => ({
     id: item.id,
     lead_id: item.lead_id,
     campaign_id: item.campaign_id,
@@ -468,6 +481,62 @@ export async function getLeadMessages(leadId: string) {
     thread_id: null,
     created_at: item.created_at
   })) as LeadEmailConversation[]
+
+  // Map email_messages to LeadEmailConversation format
+  const emailMessages = (emailMessagesData || []).map((item: any) => ({
+    id: item.id,
+    lead_id: item.lead_id,
+    campaign_id: item.campaign_id,
+    sequence_step: item.sequence_step,
+    direction: 'outbound' as const,
+    subject: item.subject,
+    body: item.content,
+    from_email: null,
+    to_email: null,
+    cc_email: [],
+    status: item.status || 'sent',
+    sent_at: item.sent_at || item.created_at,
+    delivered_at: item.delivered_at,
+    opened_at: item.opened_at,
+    replied_at: item.replied_at,
+    message_id: item.id,
+    in_reply_to: null,
+    thread_id: null,
+    created_at: item.created_at
+  })) as LeadEmailConversation[]
+
+  // Combine and deduplicate messages
+  // Use a map keyed by a unique identifier to avoid duplicates
+  const messageMap = new Map<string, LeadEmailConversation>()
+  
+  // Create a set of email_message IDs we've seen
+  const emailMessageIds = new Set(emailMessages.map(m => m.id))
+  
+  // Add email_messages (outbound emails sent)
+  emailMessages.forEach(msg => {
+    messageMap.set(`email_${msg.id}`, msg)
+  })
+  
+  // Add interactions
+  // - If interaction has email_message_id that matches an email_message, skip (we already have it)
+  // - If interaction is inbound, always add (not in email_messages)
+  // - If interaction is outbound without email_message_id, add it
+  interactions.forEach(msg => {
+    const isInbound = msg.direction === 'inbound'
+    const hasMatchingEmailMessage = msg.message_id && emailMessageIds.has(msg.message_id)
+    
+    // Add if it's inbound or if it doesn't have a matching email_message
+    if (isInbound || !hasMatchingEmailMessage) {
+      messageMap.set(`interaction_${msg.id}`, msg)
+    }
+  })
+
+  // Convert back to array and sort chronologically (oldest first)
+  return Array.from(messageMap.values()).sort((a, b) => {
+    const dateA = new Date(a.sent_at || a.created_at).getTime()
+    const dateB = new Date(b.sent_at || b.created_at).getTime()
+    return dateA - dateB
+  })
 }
 
 // ============================================================================
