@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Building2, ArrowLeft, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -46,15 +47,21 @@ export default function NewCompanyPage() {
         setIsSubmitting(true)
 
         try {
+            // Clean up empty strings to be null for optional fields
+            const payload: Record<string, any> = { ...formData }
+            Object.keys(payload).forEach(key => {
+                if (payload[key] === '') {
+                    payload[key] = null
+                }
+            })
+            payload.employee_count = formData.employee_count ? parseInt(formData.employee_count as string) : null
+
             const response = await fetch('/api/companies', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    ...formData,
-                    employee_count: formData.employee_count ? parseInt(formData.employee_count) : null,
-                }),
+                body: JSON.stringify(payload),
             })
 
             if (!response.ok) {
@@ -139,14 +146,19 @@ export default function NewCompanyPage() {
                                 <Label htmlFor="industry_type" className="text-[#004565]">
                                     Industry
                                 </Label>
-                                <Input
-                                    id="industry_type"
-                                    name="industry_type"
-                                    placeholder="e.g., Technology, Healthcare"
-                                    value={formData.industry_type}
-                                    onChange={handleChange}
-                                    className="border-[#004565]/20 focus:border-[#004565]"
-                                />
+                                <Select
+                                    value={formData.industry_type || "none"}
+                                    onValueChange={(value) => setFormData(prev => ({ ...prev, industry_type: value === 'none' ? '' : value }))}
+                                >
+                                    <SelectTrigger className="border-[#004565]/20 focus:border-[#004565] focus:ring-[#004565]">
+                                        <SelectValue placeholder="Select industry" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">None</SelectItem>
+                                        <SelectItem value="restaurant">Restaurant</SelectItem>
+                                        <SelectItem value="hotel">Hotel</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
 
                             <div className="space-y-2">
